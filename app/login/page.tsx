@@ -1,2 +1,5 @@
-import ImisoroApp from '@/components/imisoro-app'
-export default function LoginPage() { return <ImisoroApp initialView="Overview" /> }
+import { AuthForm } from '@/components/auth-form'
+
+export default function LoginPage() {
+  return <AuthForm mode="sign-in" />
+}

@@ -1,6 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { signOut, useSession } from '@/lib/auth-client'
 import { AlertTriangle, Bell, CalendarDays, CheckCircle2, CircleHelp, Download, FileCheck2, FileText, LayoutDashboard, LogOut, Menu, MessageCircle, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Upload, UserRound, WalletCards, X } from 'lucide-react'
 
 type View = 'Overview' | 'Invoices' | 'VAT summary' | 'Exports' | 'Deadlines' | 'Profile'
@@ -15,6 +17,8 @@ const nav = [{ label: 'Overview', icon: LayoutDashboard }, { label: 'Invoices', 
 const money = (n: number) => `RWF ${n.toLocaleString('en-US')}`
 
 export function ImisoroApp({ initialView = 'Overview' }: { initialView?: View }) {
+  const router = useRouter()
+  const { data: session, isPending } = useSession()
   const [active, setActive] = useState<View>(initialView)
   const [mobile, setMobile] = useState(false)
   const [invoices, setInvoices] = useState(seed)
@@ -32,6 +36,9 @@ export function ImisoroApp({ initialView = 'Overview' }: { initialView?: View })
   const [chatMessages, setChatMessages] = useState<{ role: 'assistant' | 'user'; content: string }[]>([
     { role: 'assistant', content: 'Muraho! I’m your Imisoro AI assistant. Ask me about VAT, invoice evidence, unsupported expenses, or your RRA deadlines.' },
   ])
+  useEffect(() => {
+    if (!isPending && !session?.user) router.replace('/login')
+  }, [isPending, router, session?.user])
   const filtered = useMemo(() => invoices.filter(i => `${i.supplier} ${i.id}`.toLowerCase().includes(search.toLowerCase())), [invoices, search])
   const sendChat = async (preset?: string) => {
     const content = (preset || chatInput).trim()
@@ -46,6 +53,8 @@ export function ImisoroApp({ initialView = 'Overview' }: { initialView?: View })
     finally { setChatBusy(false) }
   }
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 2800) }
+  if (isPending) return <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">Loading your secure workspace...</div>
+  if (!session?.user) return null
   const go = (view: View) => { setActive(view); setMobile(false); setSelected(null); window.history.replaceState(null, '', view === 'Overview' ? '/' : `/${view.toLowerCase().replace(' ', '-')}`) }
   const approve = (id: string) => { setInvoices(xs => xs.map(x => x.id === id ? { ...x, status: 'supported', reason: 'EBM_VALID' } : x)); setSelected(null); notify('Extraction approved and expense classified.') }
   const download = (kind: string) => { const content = kind === 'csv' ? 'Date,Supplier Name,Supplier TIN,Description,Amount,VAT Amount,Classification,Notes\n28/08/2026,Kigali Office Supplies,100003841,Office supplies,1240000,198305,Supported,EBM validated' : 'VAT Summary - August 2026\nInput VAT,RWF 4,820,000\nOutput VAT,RWF 0\nNet VAT,RWF -4,820,000'; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type: 'text/csv' })); a.download = `imisoro-${kind}.csv`; a.click(); notify('Your report is downloading.') }
@@ -53,7 +62,7 @@ export function ImisoroApp({ initialView = 'Overview' }: { initialView?: View })
     <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex-col border-r border-border bg-sidebar px-4 py-5 ${mobile ? 'flex' : 'hidden'} lg:flex`}>
       <div className="flex items-center justify-between px-3"><div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"><ShieldCheck className="size-5" /></div><div><p className="text-sm font-semibold">Imisoro <span className="text-primary">AI</span></p><p className="text-[11px] text-muted-foreground">Tax clarity, made simple</p></div></div><button className="lg:hidden" onClick={() => setMobile(false)} aria-label="Close menu"><X className="size-5" /></button></div>
       <nav className="mt-9 flex flex-col gap-1"><p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Workspace</p>{nav.map(({ label, icon: Icon, count }) => <button key={label} onClick={() => go(label as View)} className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm ${active === label ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}><span className="flex items-center gap-3"><Icon className="size-[17px]" />{label}</span>{count && <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px]">{count}</span>}</button>)}</nav>
-      <div className="mt-auto flex flex-col gap-1"><button onClick={() => notify('Settings are available from your profile.')} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent"><Settings className="size-[17px]" />Settings</button><button onClick={() => notify('Help center: review an invoice or contact support.')} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent"><CircleHelp className="size-[17px]" />Help center</button><div className="mt-3 flex items-center gap-3 border-t border-border px-3 pt-4"><div className="flex size-9 items-center justify-center rounded-full bg-accent text-xs font-bold text-primary">AM</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">Aline Mukamana</p><p className="truncate text-[10px] text-muted-foreground">Kivu Creative Ltd</p></div><button onClick={() => notify('You are safely signed out in this preview.')} aria-label="Log out"><LogOut className="size-4 text-muted-foreground" /></button></div></div>
+      <div className="mt-auto flex flex-col gap-1"><button onClick={() => notify('Settings are available from your profile.')} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent"><Settings className="size-[17px]" />Settings</button><button onClick={() => notify('Help center: review an invoice or contact support.')} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent"><CircleHelp className="size-[17px]" />Help center</button><div className="mt-3 flex items-center gap-3 border-t border-border px-3 pt-4"><div className="flex size-9 items-center justify-center rounded-full bg-accent text-xs font-bold text-primary">AM</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">Aline Mukamana</p><p className="truncate text-[10px] text-muted-foreground">Kivu Creative Ltd</p></div><button onClick={async () => { await signOut(); router.replace('/login'); router.refresh() }} aria-label="Log out"><LogOut className="size-4 text-muted-foreground" /></button></div></div>
     </aside>
     {mobile && <button aria-label="Close navigation" onClick={() => setMobile(false)} className="fixed inset-0 z-30 bg-foreground/20 lg:hidden" />}
     <div className="lg:pl-64"><header className="flex h-16 items-center gap-4 border-b border-border px-5 md:px-8"><button onClick={() => setMobile(true)} className="lg:hidden" aria-label="Open menu"><Menu className="size-5" /></button><div className="relative flex max-w-sm flex-1 items-center"><Search className="absolute left-3 size-4 text-muted-foreground" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search invoices..." aria-label="Search invoices" className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring" /></div><div className="relative"><button onClick={() => setMenu(menu === 'language' ? null : 'language')} className="flex items-center gap-1 text-xs font-semibold" aria-label="Choose language">{language}<span>⌄</span></button>{menu === 'language' && <div className="absolute right-0 top-8 z-50 w-32 rounded-lg border border-border bg-card p-1 shadow-lg">{['EN', 'RW', 'FR'].map(item => <button key={item} onClick={() => { setLanguage(item); setMenu(null); notify(`Language changed to ${item}.`) }} className="block w-full rounded-md px-3 py-2 text-left text-xs hover:bg-accent">{item}</button>)}</div>}</div><div className="relative"><button onClick={() => setMenu(menu === 'notifications' ? null : 'notifications')} aria-label="Notifications"><Bell className="size-5 text-muted-foreground" /></button>{menu === 'notifications' && <div className="absolute right-0 top-8 z-50 w-64 rounded-lg border border-border bg-card p-4 shadow-lg"><p className="text-sm font-semibold">Notifications</p><p className="mt-2 text-xs text-muted-foreground">VAT return is due on 10 September 2026.</p></div>}</div><button onClick={() => go('Profile')} className="flex size-8 items-center justify-center rounded-full bg-accent text-xs font-bold text-primary" aria-label="Open profile">AM</button></header>
