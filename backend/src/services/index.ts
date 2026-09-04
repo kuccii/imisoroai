@@ -1,0 +1,8 @@
+export type ExtractedInvoiceData = { invoice_date: string; supplier_name: string; supplier_tin: string; total_amount: number; vat_amount: number; line_items: Array<{ description: string; quantity: number; unit_price: number; vat_rate: number; vat_amount: number }> }
+export type ClassificationResult = { classification: 'supported' | 'unsupported'; reason_code: string; explanation: string }
+export interface OcrService { processImage(fileBuffer: Buffer): Promise<string> }
+export interface LlmService { extractInvoiceData(ocrText: string): Promise<ExtractedInvoiceData>; classifyExpense(data: ExtractedInvoiceData): Promise<ClassificationResult> }
+export interface EmailService { sendReminder(user: { email: string }, deadline: { due_date: Date }): Promise<void> }
+export const ocrService: OcrService = { async processImage() { return 'EBM INVOICE / Supplier: Example Rwanda Ltd / TIN: 100000001 / Total: 100000 / VAT: 15254' } }
+export const llmService: LlmService = { async extractInvoiceData() { return { invoice_date: new Date().toISOString(), supplier_name: 'Example Rwanda Ltd', supplier_tin: '100000001', total_amount: 100000, vat_amount: 15254, line_items: [] } }, async classifyExpense(data) { return { classification: data.supplier_tin ? 'supported' : 'unsupported', reason_code: data.supplier_tin ? 'EBM_VALID' : 'NO_EBM', explanation: data.supplier_tin ? 'Valid EBM supplier details were found.' : 'Supplier details are incomplete for RRA support.' } } }
+export const emailService: EmailService = { async sendReminder(user, deadline) { console.log('[v0] reminder queued', { email: user.email, due: deadline.due_date }) } }

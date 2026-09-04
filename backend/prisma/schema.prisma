@@ -1,0 +1,16 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+enum Role { owner accountant }
+enum Language { en fr rw }
+enum InvoiceStatus { pending_extraction pending_review approved classified }
+enum InvoiceType { purchase sale }
+enum ClassificationType { supported unsupported }
+enum DeadlineType { VAT WHT CIT }
+enum Channel { email sms }
+model User { id String @id @default(cuid()) email String @unique password_hash String role Role @default(owner) created_at DateTime @default(now()) businesses Business[] @relation("OwnerBusinesses") reminders ReminderLog[] }
+model Business { id String @id @default(cuid()) owner_id String name String tin String @unique contact_email String? contact_phone String? preferred_language Language @default(en) created_at DateTime @default(now()) owner User @relation("OwnerBusinesses", fields: [owner_id], references: [id]) invoices Invoice[] @@index([owner_id]) }
+model Invoice { id String @id @default(cuid()) business_id String file_path String file_type String original_filename String uploaded_at DateTime @default(now()) status InvoiceStatus @default(pending_extraction) invoice_date DateTime? supplier_name String? supplier_tin String? total_amount Decimal? vat_amount Decimal? invoice_type InvoiceType @default(purchase) business Business @relation(fields: [business_id], references: [id]) line_items LineItem[] classification Classification? @@index([business_id, invoice_date]) }
+model LineItem { id String @id @default(cuid()) invoice_id String description String quantity Decimal unit_price Decimal vat_rate Decimal vat_amount Decimal invoice Invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade) }
+model Classification { id String @id @default(cuid()) invoice_id String @unique classification ClassificationType reason_code String explanation String overridden_by_user Boolean @default(false) user_note String? invoice Invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade) }
+model TaxDeadline { id String @id @default(cuid()) type DeadlineType due_date DateTime description_en String description_fr String description_rw String reminders ReminderLog[] @@index([due_date]) }
+model ReminderLog { id String @id @default(cuid()) user_id String deadline_id String sent_at DateTime @default(now()) channel Channel user User @relation(fields: [user_id], references: [id]) deadline TaxDeadline @relation(fields: [deadline_id], references: [id]) @@unique([user_id, deadline_id, channel]) }
