@@ -1,10 +1,30 @@
-import { auth } from '@/lib/auth'
-import ImisoroApp from '@/components/imisoro-app'
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { ArrowRight, Check, FileCheck2, Languages, ShieldCheck, Sparkles, Upload, WalletCards } from 'lucide-react'
 
-export default async function Page() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) redirect('/login')
-  return <ImisoroApp />
+const features = [
+  { icon: Upload, title: 'Upload once', text: 'Drop EBM receipts and invoices. Imisoro AI reads the document and captures the important fields.' },
+  { icon: FileCheck2, title: 'Review with confidence', text: 'See missing evidence, VAT amounts and supplier details before anything reaches your tax report.' },
+  { icon: WalletCards, title: 'Stay filing-ready', text: 'Calculate input VAT and export unsupported expenses in a format your team can use in e-Tax.' },
+]
+
+export default function HomePage() {
+  return (
+    <main className="min-h-screen bg-background text-foreground">
+      <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-6 md:px-8">
+        <Link href="/" className="flex items-center gap-3" aria-label="Imisoro AI home">
+          <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><ShieldCheck className="size-5" /></span>
+          <span><span className="block text-sm font-semibold">Imisoro <span className="text-primary">AI</span></span><span className="block text-[11px] text-muted-foreground">Tax clarity, made simple</span></span>
+        </Link>
+        <nav className="flex items-center gap-3 text-sm"><Link href="/login" className="hidden px-3 py-2 text-muted-foreground hover:text-foreground sm:inline">Sign in</Link><Link href="/signup" className="rounded-lg bg-primary px-4 py-2.5 font-semibold text-primary-foreground hover:opacity-90">Get started <ArrowRight className="ml-1 inline size-4" /></Link></nav>
+      </header>
+
+      <section className="mx-auto grid max-w-7xl gap-12 px-5 pb-20 pt-14 md:px-8 md:pb-28 md:pt-24 lg:grid-cols-[1.05fr_.95fr] lg:items-center">
+        <div><div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-primary"><Sparkles className="size-3.5" /> Built for Rwanda&apos;s VAT-registered SMEs</div><h1 className="max-w-3xl text-balance text-4xl font-semibold tracking-tight md:text-6xl md:leading-[1.08]">Your tax records, <span className="text-primary">clear and ready.</span></h1><p className="mt-6 max-w-xl text-pretty text-base leading-7 text-muted-foreground md:text-lg">Imisoro AI turns EBM invoices into reliable tax workflows. Extract evidence, understand expense support, and prepare VAT and e-Tax reports without the spreadsheet chase.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/signup" className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90">Start free <ArrowRight className="ml-2 size-4" /></Link><Link href="/login" className="inline-flex items-center justify-center rounded-lg border border-border px-5 py-3 text-sm font-semibold hover:bg-accent">Sign in to workspace</Link></div><div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground"><span><Check className="mr-1 inline size-3.5 text-primary" /> RRA-aware workflows</span><span><Check className="mr-1 inline size-3.5 text-primary" /> English, Kinyarwanda, French</span></div></div>
+        <div className="relative rounded-3xl border border-border bg-card p-5 shadow-2xl shadow-primary/5 md:p-7"><div className="flex items-center justify-between border-b border-border pb-5"><div><p className="text-xs font-semibold uppercase tracking-wider text-primary">Workspace preview</p><p className="mt-1 text-lg font-semibold">August tax health</p></div><span className="rounded-full bg-accent px-3 py-1 text-xs font-semibold text-primary">Ready to review</span></div><div className="grid gap-3 py-6 sm:grid-cols-2"><div className="rounded-2xl bg-muted/50 p-4"><p className="text-xs text-muted-foreground">Input VAT captured</p><p className="mt-2 text-2xl font-semibold">RWF 4.82M</p><p className="mt-1 text-xs text-primary">48 invoices processed</p></div><div className="rounded-2xl bg-muted/50 p-4"><p className="text-xs text-muted-foreground">Evidence quality</p><p className="mt-2 text-2xl font-semibold">87.5%</p><p className="mt-1 text-xs text-primary">42 supported expenses</p></div></div><div className="flex flex-col gap-3 rounded-2xl border border-border p-4"><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-lg bg-accent text-primary"><FileCheck2 className="size-4" /></span><div className="flex-1"><p className="text-sm font-semibold">AI extraction complete</p><p className="text-xs text-muted-foreground">Kigali Office Supplies · RWF 1,240,000</p></div><span className="text-xs font-semibold text-primary">Review</span></div><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-lg bg-accent text-primary"><ShieldCheck className="size-4" /></span><div className="flex-1"><p className="text-sm font-semibold">EBM evidence checked</p><p className="text-xs text-muted-foreground">Rwanda Fresh Foods Ltd</p></div><span className="text-xs font-semibold text-primary">Supported</span></div></div></div>
+      </section>
+
+      <section className="border-y border-border bg-card/50"><div className="mx-auto max-w-7xl px-5 py-16 md:px-8"><div className="max-w-xl"><p className="text-xs font-semibold uppercase tracking-wider text-primary">One focused workspace</p><h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">Less uncertainty at every filing step.</h2></div><div className="mt-10 grid gap-4 md:grid-cols-3">{features.map(({ icon: Icon, title, text }) => <div key={title} className="rounded-2xl border border-border bg-background p-6"><Icon className="size-5 text-primary" /><h3 className="mt-5 text-base font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></div>)}</div></div></section>
+      <footer className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between md:px-8"><span>© 2026 Imisoro AI. Built for clearer compliance.</span><span className="flex items-center gap-2"><Languages className="size-3.5" /> English · Kinyarwanda · Français</span></footer>
+    </main>
+  )
 }
