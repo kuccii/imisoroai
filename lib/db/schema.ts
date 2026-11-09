@@ -68,3 +68,25 @@ export const invoiceRecord = pgTable('invoice_record', {
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const complianceTask = pgTable('compliance_task', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  dueDate: text('dueDate').notNull(),
+  status: text('status').notNull().default('open'),
+  source: text('source').notNull().default('rwanda_tax_calendar'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const auditEvent = pgTable('audit_event', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  action: text('action').notNull(),
+  entityType: text('entityType').notNull(),
+  entityId: text('entityId'),
+  metadata: text('metadata'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
