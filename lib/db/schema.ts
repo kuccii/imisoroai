@@ -66,4 +66,5 @@ export const invoiceRecord = pgTable('invoice_record', {
   vat: integer('vat').notNull(),
   status: text('status').notNull().default('pending'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })

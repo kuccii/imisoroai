@@ -1,10 +1,9 @@
-import { auth } from '@/lib/auth'
 import ImisoroApp from '@/components/imisoro-app'
-import { headers } from 'next/headers'
+import { getWorkspaceData } from '@/lib/data'
 import { redirect } from 'next/navigation'
 
 export default async function DashboardPage() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) redirect('/login')
-  return <ImisoroApp initialView="Overview" />
+  const workspace = await getWorkspaceData()
+  if (!workspace) redirect('/login')
+  return <ImisoroApp initialView="Overview" initialSession={workspace.session} initialInvoices={workspace.invoices} />
 }
