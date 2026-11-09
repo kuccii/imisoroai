@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { invoiceRecord } from '@/lib/db/schema'
+import { auditEvent, invoiceRecord } from '@/lib/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
@@ -16,5 +16,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const { id } = await context.params
   const [invoice] = await db.update(invoiceRecord).set({ status: body.data.status, updatedAt: new Date() }).where(and(eq(invoiceRecord.id, id), eq(invoiceRecord.userId, session.user.id))).returning()
   if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
+  await db.insert(auditEvent).values({ id: `AUD-${Date.now().toString(36).toUpperCase()}`, userId: session.user.id, action: `invoice_status_${body.data.status}`, entityType: 'invoice', entityId: invoice.id })
   return NextResponse.json({ invoice })
 }

@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { invoiceRecord } from '@/lib/db/schema'
+import { auditEvent, invoiceRecord } from '@/lib/db/schema'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
@@ -34,5 +34,6 @@ export async function POST(request: Request) {
 
   const id = `INV-${Date.now().toString(36).toUpperCase()}`
   const [invoice] = await db.insert(invoiceRecord).values({ id, userId, ...parsed.data, status: 'pending' }).returning()
+  await db.insert(auditEvent).values({ id: `AUD-${Date.now().toString(36).toUpperCase()}`, userId, action: 'invoice_created', entityType: 'invoice', entityId: invoice.id })
   return NextResponse.json({ invoice }, { status: 201 })
 }

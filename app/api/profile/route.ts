@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { profile } from '@/lib/db/schema'
+import { auditEvent, profile } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
@@ -31,5 +31,6 @@ export async function PUT(request: Request) {
   const parsed = profileSchema.safeParse(await request.json())
   if (!parsed.success) return NextResponse.json({ error: 'Please provide valid business details.' }, { status: 400 })
   const [saved] = await db.insert(profile).values({ userId: user.id, ...parsed.data }).onConflictDoUpdate({ target: profile.userId, set: { ...parsed.data, updatedAt: new Date() } }).returning()
+  await db.insert(auditEvent).values({ id: `AUD-${Date.now().toString(36).toUpperCase()}`, userId: user.id, action: 'profile_updated', entityType: 'profile', entityId: user.id })
   return NextResponse.json({ profile: saved })
 }
