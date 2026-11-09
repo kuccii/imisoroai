@@ -3,14 +3,12 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, ShieldCheck } from 'lucide-react'
 import { signIn, signUp } from '@/lib/auth-client'
 
 interface AuthFormProps { mode: 'sign-in' | 'sign-up' }
 
 export function AuthForm({ mode }: AuthFormProps) {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
@@ -30,8 +28,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         setError('We could not authenticate you. Check your details and try again.')
         return
       }
-      router.replace('/dashboard')
-      router.refresh()
+      window.location.assign('/dashboard')
     } catch {
       setError('We could not authenticate you. Check your details and try again.')
     } finally { setLoading(false) }
