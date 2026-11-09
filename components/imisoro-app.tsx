@@ -10,7 +10,7 @@ type Invoice = { id: string; supplier: string; tin: string; date: string; amount
 const nav = [{ label: 'Overview', icon: LayoutDashboard }, { label: 'Invoices', icon: FileText, count: 12 }, { label: 'VAT summary', icon: WalletCards }, { label: 'Exports', icon: Download }, { label: 'Deadlines', icon: Bell, count: 2 }, { label: 'Profile', icon: UserRound }]
 const money = (n: number) => `RWF ${n.toLocaleString('en-US')}`
 
-export function ImisoroApp({ initialView = 'Overview', initialSession, initialInvoices = [] }: { initialView?: View; initialSession: { user: { name?: string | null; email: string } }; initialInvoices?: Invoice[] }) {
+export function ImisoroApp({ initialView = 'Overview', initialSession, initialInvoices = [] }: { initialView?: View; initialSession?: { user: { name?: string | null; email: string } }; initialInvoices?: Invoice[] }) {
   const router = useRouter()
   const { data: session, isPending } = useSession()
   const [active, setActive] = useState<View>(initialView)

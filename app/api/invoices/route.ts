@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { invoiceRecord } from '@/lib/db/schema'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 const createInvoiceSchema = z.object({
