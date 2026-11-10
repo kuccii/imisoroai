@@ -41,6 +41,8 @@ export async function getWorkspaceData() {
       type: 'purchase' as const,
       initials: row.supplier.slice(0, 2).toUpperCase(),
       reason: row.status === 'supported' ? 'EBM_VALID' : row.status === 'unsupported' ? 'NO_EBM' : undefined,
+      documentPathname: row.blobPathname,
+      originalFilename: row.originalFilename,
     })),
   }
 }

@@ -1,3 +1,4 @@
+import { put } from '@vercel/blob'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { invoiceRecord } from '@/lib/db/schema'
@@ -33,6 +34,9 @@ export async function POST(request: Request) {
   if (file.size === 0 || file.size > 10 * 1024 * 1024) return NextResponse.json({ error: 'Files must be between 1 byte and 10MB.' }, { status: 400 })
   if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) return NextResponse.json({ error: 'Only PDF, JPG, and PNG invoices are supported.' }, { status: 415 })
 
+  const id = `INV-${Date.now().toString(36).toUpperCase()}`
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-').slice(-120)
+  const blob = await put(`invoices/${session.user.id}/${id}-${safeName}`, file, { access: 'private', addRandomSuffix: false, contentType: file.type })
   const bytes = Buffer.from(await file.arrayBuffer())
   const mediaType = file.type as 'application/pdf' | 'image/jpeg' | 'image/png'
   const { object } = await generateObject({
@@ -49,7 +53,6 @@ export async function POST(request: Request) {
   })
 
   const status = object.confidence >= 0.86 && object.evidence === 'ebm_present' ? 'supported' : object.evidence === 'ebm_missing' ? 'unsupported' : 'pending'
-  const id = `INV-${Date.now().toString(36).toUpperCase()}`
   const [invoice] = await db.insert(invoiceRecord).values({
     id,
     userId: session.user.id,
@@ -59,6 +62,9 @@ export async function POST(request: Request) {
     amount: Math.round(object.amount),
     vat: Math.round(object.vat),
     status,
+    blobPathname: blob.pathname,
+    originalFilename: file.name,
+    contentType: file.type,
   }).returning()
 
   return NextResponse.json({ invoice, extraction: object, requiresReview: status === 'pending' })
