@@ -65,6 +65,9 @@ export const invoiceRecord = pgTable('invoice_record', {
   amount: integer('amount').notNull(),
   vat: integer('vat').notNull(),
   status: text('status').notNull().default('pending'),
+  blobPathname: text('blobPathname'),
+  originalFilename: text('originalFilename'),
+  contentType: text('contentType'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })
