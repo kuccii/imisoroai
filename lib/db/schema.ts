@@ -93,3 +93,38 @@ export const auditEvent = pgTable('audit_event', {
   metadata: text('metadata'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const ledgerAccount = pgTable('ledger_account', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  code: text('code').notNull(),
+  name: text('name').notNull(),
+  type: text('type').notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const ledgerEntry = pgTable('ledger_entry', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  accountId: text('accountId').notNull(),
+  referenceType: text('referenceType').notNull(),
+  referenceId: text('referenceId').notNull(),
+  description: text('description').notNull(),
+  debit: integer('debit').notNull().default(0),
+  credit: integer('credit').notNull().default(0),
+  entryDate: text('entryDate').notNull(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const businessTransaction = pgTable('business_transaction', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  type: text('type').notNull(),
+  counterparty: text('counterparty').notNull(),
+  reference: text('reference'),
+  amount: integer('amount').notNull(),
+  transactionDate: text('transactionDate').notNull(),
+  status: text('status').notNull().default('unmatched'),
+  source: text('source').notNull().default('manual'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
