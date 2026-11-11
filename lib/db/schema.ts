@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, integer, numeric, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
@@ -127,4 +127,64 @@ export const businessTransaction = pgTable('business_transaction', {
   status: text('status').notNull().default('unmatched'),
   source: text('source').notNull().default('manual'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const businessFiscalProfile = pgTable('business_fiscal_profile', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull().unique(),
+  taxpayerTin: text('taxpayerTin'),
+  legalName: text('legalName'),
+  branchCode: text('branchCode'),
+  deviceSerial: text('deviceSerial'),
+  environment: text('environment').notNull().default('sandbox'),
+  certificationStatus: text('certificationStatus').notNull().default('not_started'),
+  productionEnabled: boolean('productionEnabled').notNull().default(false),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const fiscalSale = pgTable('fiscal_sale', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  saleDate: text('saleDate').notNull(),
+  counterparty: text('counterparty').notNull(),
+  counterpartyTin: text('counterpartyTin'),
+  currency: text('currency').notNull().default('RWF'),
+  subtotalRwf: integer('subtotalRwf').notNull(),
+  declaredTaxRwf: integer('declaredTaxRwf').notNull().default(0),
+  totalRwf: integer('totalRwf').notNull(),
+  status: text('status').notNull().default('draft'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const fiscalSaleLine = pgTable('fiscal_sale_line', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  saleId: text('saleId').notNull(),
+  description: text('description').notNull(),
+  quantity: numeric('quantity', { precision: 16, scale: 4 }).notNull(),
+  unitPriceRwf: integer('unitPriceRwf').notNull(),
+  netRwf: integer('netRwf').notNull(),
+  declaredTaxRwf: integer('declaredTaxRwf').notNull().default(0),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const fiscalSubmission = pgTable('fiscal_submission', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  saleId: text('saleId').notNull(),
+  idempotencyKey: text('idempotencyKey').notNull().unique(),
+  environment: text('environment').notNull(),
+  status: text('status').notNull().default('queued'),
+  requestHash: text('requestHash'),
+  externalCorrelationId: text('externalCorrelationId'),
+  fiscalReceiptNumber: text('fiscalReceiptNumber'),
+  responseCode: text('responseCode'),
+  errorCode: text('errorCode'),
+  errorMessage: text('errorMessage'),
+  attemptCount: integer('attemptCount').notNull().default(0),
+  lastAttemptAt: timestamp('lastAttemptAt', { withTimezone: true }),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })

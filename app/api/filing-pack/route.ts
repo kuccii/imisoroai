@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { businessTransaction, invoiceRecord, profile } from '@/lib/db/schema'
+import { businessTransaction, fiscalSale, fiscalSubmission, invoiceRecord, profile } from '@/lib/db/schema'
 import { and, eq, gte, lt } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
@@ -17,15 +17,18 @@ export async function GET(request: Request) {
   const endDate = new Date(`${period}-01T00:00:00.000Z`)
   endDate.setUTCMonth(endDate.getUTCMonth() + 1)
   const until = endDate.toISOString().slice(0, 10)
-  const [invoices, transactions, [business]] = await Promise.all([
+  const [invoices, transactions, fiscalizedSales, submissions, [business]] = await Promise.all([
     db.select().from(invoiceRecord).where(and(eq(invoiceRecord.userId, session.user.id), gte(invoiceRecord.invoiceDate, from), lt(invoiceRecord.invoiceDate, until))),
     db.select().from(businessTransaction).where(and(eq(businessTransaction.userId, session.user.id), gte(businessTransaction.transactionDate, from), lt(businessTransaction.transactionDate, until))),
+    db.select().from(fiscalSale).where(and(eq(fiscalSale.userId, session.user.id), eq(fiscalSale.status, 'fiscalized'), gte(fiscalSale.saleDate, from), lt(fiscalSale.saleDate, until))),
+    db.select().from(fiscalSubmission).where(and(eq(fiscalSubmission.userId, session.user.id), eq(fiscalSubmission.status, 'fiscalized'))),
     db.select().from(profile).where(eq(profile.userId, session.user.id)),
   ])
   const eligiblePurchases = invoices.filter(invoice => invoice.status === 'supported')
   const outstandingReview = invoices.filter(invoice => invoice.status === 'pending')
   const unsupported = invoices.filter(invoice => invoice.status === 'unsupported')
   const sales = transactions.filter(transaction => transaction.type === 'sale')
+  const submissionBySale = new Map(submissions.map(submission => [submission.saleId, submission]))
   return NextResponse.json({
     preparationOnly: true,
     submissionSupported: false,
@@ -40,16 +43,21 @@ export async function GET(request: Request) {
       supportedInputVatRwf: eligiblePurchases.reduce((sum, invoice) => sum + invoice.vat, 0),
       salesCount: sales.length,
       recordedSalesGrossRwf: sales.reduce((sum, transaction) => sum + transaction.amount, 0),
+      manualSalesGrossRwf: sales.reduce((sum, transaction) => sum + transaction.amount, 0),
+      fiscalizedSalesCount: fiscalizedSales.length,
+      fiscalizedSalesGrossRwf: fiscalizedSales.reduce((sum, sale) => sum + sale.totalRwf, 0),
       outputVatStatus: 'not_calculated',
     },
     checklist: [
       { id: 'taxpayer', label: 'Confirm taxpayer TIN and period in RRA eTax', status: business?.tin ? 'review' : 'blocked' },
       { id: 'purchases', label: 'Review supported purchase invoices and input VAT', status: outstandingReview.length ? 'review' : 'ready' },
       { id: 'sales', label: 'Reconcile sales with EBM/EIS records and output VAT', status: 'required' },
+      { id: 'fiscalized-sales', label: 'Verify fiscalized sales and RRA receipt numbers', status: fiscalizedSales.length ? 'review' : 'required' },
       { id: 'submit', label: 'Review and submit the return in RRA eTax', status: 'external' },
     ],
     purchaseInvoices: invoices.map(({ id, supplier, tin, invoiceDate, amount, vat, status, originalFilename }) => ({ id, supplier, supplierTin: tin, invoiceDate, amountRwf: amount, vatRwf: vat, reviewStatus: status, originalFilename })),
-    recordedSales: sales.map(({ id, counterparty, reference, transactionDate, amount }) => ({ id, counterparty, reference, transactionDate, amountRwf: amount })),
+    recordedSales: sales.map(({ id, counterparty, reference, transactionDate, amount }) => ({ id, counterparty, reference, transactionDate, amountRwf: amount, fiscalizationStatus: 'not_fiscalized' })),
+    fiscalizedSales: fiscalizedSales.map(({ id, counterparty, saleDate, totalRwf }) => ({ id, counterparty, saleDate, totalRwf, fiscalReceiptNumber: submissionBySale.get(id)?.fiscalReceiptNumber ?? null, externalCorrelationId: submissionBySale.get(id)?.externalCorrelationId ?? null })),
     notice: 'This preparation pack is a review aid, not an RRA-approved return or proof of filing. Output VAT and statutory form fields are not calculated here. Verify all figures against current RRA eTax guidance before filing.',
   })
 }
