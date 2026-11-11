@@ -25,6 +25,16 @@ export async function GET() {
   return NextResponse.json({ profile: existing ?? { userId: user.id, businessName: user.name || 'My business', tin: 'PENDING', language: 'en' } })
 }
 
+export async function PATCH(request: Request) {
+  const user = await currentUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const parsed = z.object({ language: z.enum(['en', 'rw', 'fr']) }).safeParse(await request.json())
+  if (!parsed.success) return NextResponse.json({ error: 'Choose a supported language.' }, { status: 400 })
+  const [saved] = await db.insert(profile).values({ userId: user.id, businessName: user.name || 'My business', tin: 'PENDING', language: parsed.data.language }).onConflictDoUpdate({ target: profile.userId, set: { language: parsed.data.language, updatedAt: new Date() } }).returning()
+  await db.insert(auditEvent).values({ id: `AUD-${Date.now().toString(36).toUpperCase()}`, userId: user.id, action: 'language_updated', entityType: 'profile', entityId: user.id })
+  return NextResponse.json({ profile: saved })
+}
+
 export async function PUT(request: Request) {
   const user = await currentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
