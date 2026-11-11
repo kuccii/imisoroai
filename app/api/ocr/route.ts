@@ -52,6 +52,7 @@ export async function POST(request: Request) {
   const id = `INV-${crypto.randomUUID()}`
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-').slice(-120)
   let blobPathname: string | null = null
+  let blobUrl: string | null = null
   let persisted = false
 
   try {
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
       contentType: file.type,
     })
     blobPathname = blob.pathname
+    blobUrl = blob.url
 
     const mediaType = file.type as 'application/pdf' | 'image/jpeg' | 'image/png'
     const { output: object } = await generateText({
@@ -106,7 +108,7 @@ export async function POST(request: Request) {
     persisted = true
     return NextResponse.json({ invoice, extraction: object, requiresReview: true })
   } catch {
-    if (blobPathname && !persisted) await del(blobPathname).catch(() => undefined)
+    if (blobUrl && !persisted) await del(blobUrl).catch(() => undefined)
     return NextResponse.json({ error: 'The invoice could not be processed. Please try again.' }, { status: 500 })
   }
 }

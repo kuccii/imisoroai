@@ -38,7 +38,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       eq(invoiceRecord.userId, session.user.id),
     )).limit(1)
     if (!existing) return { kind: 'missing' as const }
-    if (body.data.status === 'supported' && (!existing.blobPathname || body.data.tin.toUpperCase() === 'PENDING' || body.data.invoiceDate === 'UNKNOWN')) return { kind: 'incomplete' as const }
+    if (body.data.status === 'supported' && (!existing.blobPathname || body.data.tin.toUpperCase() === 'PENDING' || body.data.invoiceDate === 'UNKNOWN' || body.data.amount <= 0)) return { kind: 'incomplete' as const }
 
     const [invoice] = await tx.update(invoiceRecord).set({
       status: body.data.status,
@@ -74,6 +74,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   })
 
   if (result.kind === 'missing') return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
-  if (result.kind === 'incomplete') return NextResponse.json({ error: 'A supported decision requires the original document, a non-placeholder supplier TIN, and a verified invoice date.' }, { status: 409 })
+  if (result.kind === 'incomplete') return NextResponse.json({ error: 'A supported decision requires the original document, a non-placeholder supplier TIN, a verified invoice date, and a positive invoice total.' }, { status: 409 })
   return NextResponse.json({ invoice: result.invoice })
 }

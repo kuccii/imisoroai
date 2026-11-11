@@ -22,7 +22,34 @@ export async function GET() {
   })
 }
 
+const createSchema = z.object({
+  title: z.string().trim().min(2).max(120),
+  description: z.string().trim().min(4).max(500),
+  dueDate: z.string().date(),
+})
+
 const updateSchema = z.object({ taskId: z.string().min(1).max(200), status: z.enum(['open', 'completed']) })
+
+export async function POST(request: Request) {
+  const id = await userId()
+  if (!id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  let input: unknown
+  try {
+    input = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Enter a title, description, and date.' }, { status: 400 })
+  }
+  const parsed = createSchema.safeParse(input)
+  if (!parsed.success) return NextResponse.json({ error: 'Enter a valid reminder.' }, { status: 400 })
+
+  const task = await db.transaction(async (tx) => {
+    const taskId = `TAX-${crypto.randomUUID()}`
+    const [created] = await tx.insert(complianceTask).values({ ...parsed.data, id: taskId, userId: id, source: 'manual', status: 'open' }).returning()
+    await tx.insert(auditEvent).values({ id: `AUD-${crypto.randomUUID()}`, userId: id, action: 'manual_compliance_task_created', entityType: 'compliance_task', entityId: taskId, metadata: JSON.stringify({ dueDateSource: 'user_entered' }) })
+    return created
+  })
+  return NextResponse.json({ task }, { status: 201 })
+}
 
 export async function PATCH(request: Request) {
   const id = await userId()
