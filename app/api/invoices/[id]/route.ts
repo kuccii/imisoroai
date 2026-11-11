@@ -9,6 +9,13 @@ import { z } from 'zod'
 const updateSchema = z.object({
   status: z.enum(['supported', 'unsupported']),
   reviewNote: z.string().trim().min(10).max(500),
+  supplier: z.string().trim().min(2).max(160),
+  tin: z.string().trim().min(3).max(40),
+  invoiceDate: z.union([z.string().date(), z.literal('UNKNOWN')]),
+  amount: z.number().int().nonnegative().max(1_000_000_000),
+  vat: z.number().int().nonnegative().max(1_000_000_000),
+}).superRefine((input, context) => {
+  if (input.vat > input.amount) context.addIssue({ code: 'custom', path: ['vat'], message: 'VAT cannot exceed the invoice total.' })
 })
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -31,9 +38,17 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       eq(invoiceRecord.userId, session.user.id),
     )).limit(1)
     if (!existing) return { kind: 'missing' as const }
-    if (body.data.status === 'supported' && !existing.blobPathname) return { kind: 'no_source' as const }
+    if (body.data.status === 'supported' && (!existing.blobPathname || body.data.tin.toUpperCase() === 'PENDING' || body.data.invoiceDate === 'UNKNOWN')) return { kind: 'incomplete' as const }
 
-    const [invoice] = await tx.update(invoiceRecord).set({ status: body.data.status, updatedAt: new Date() }).where(and(
+    const [invoice] = await tx.update(invoiceRecord).set({
+      status: body.data.status,
+      supplier: body.data.supplier,
+      tin: body.data.tin,
+      invoiceDate: body.data.invoiceDate,
+      amount: body.data.amount,
+      vat: body.data.vat,
+      updatedAt: new Date(),
+    }).where(and(
       eq(invoiceRecord.id, id),
       eq(invoiceRecord.userId, session.user.id),
     )).returning()
@@ -50,6 +65,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         originalFilename: existing.originalFilename,
         sourcePathname: existing.blobPathname,
         decisionMethod: 'human_review',
+        before: { supplier: existing.supplier, tin: existing.tin, invoiceDate: existing.invoiceDate, amount: existing.amount, vat: existing.vat },
+        after: { supplier: invoice.supplier, tin: invoice.tin, invoiceDate: invoice.invoiceDate, amount: invoice.amount, vat: invoice.vat },
       }),
     })
 
@@ -57,6 +74,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   })
 
   if (result.kind === 'missing') return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
-  if (result.kind === 'no_source') return NextResponse.json({ error: 'Attach and inspect the original invoice before approving it.' }, { status: 409 })
+  if (result.kind === 'incomplete') return NextResponse.json({ error: 'A supported decision requires the original document, a non-placeholder supplier TIN, and a verified invoice date.' }, { status: 409 })
   return NextResponse.json({ invoice: result.invoice })
 }

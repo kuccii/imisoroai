@@ -5,15 +5,27 @@ import { Check, ExternalLink, X } from 'lucide-react'
 
 type ReviewStatus = 'supported' | 'unsupported'
 
+type UpdatedInvoice = { id: string; status: ReviewStatus; supplier: string; tin: string; invoiceDate: string; amount: number; vat: number }
+
 type Props = {
   invoiceId: string
   status: 'pending' | ReviewStatus
+  supplier: string
+  tin: string
+  invoiceDate: string
+  amount: number
+  vat: number
   documentPathname?: string | null
   originalFilename?: string | null
-  onReviewed: (invoiceId: string, status: ReviewStatus) => void
+  onReviewed: (invoice: UpdatedInvoice) => void
 }
 
-export function InvoiceReviewActions({ invoiceId, status, documentPathname, originalFilename, onReviewed }: Props) {
+export function InvoiceReviewActions({ invoiceId, status, supplier: initialSupplier, tin: initialTin, invoiceDate: initialDate, amount: initialAmount, vat: initialVat, documentPathname, originalFilename, onReviewed }: Props) {
+  const [supplier, setSupplier] = useState(initialSupplier)
+  const [tin, setTin] = useState(initialTin)
+  const [invoiceDate, setInvoiceDate] = useState(/^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : '')
+  const [amount, setAmount] = useState(String(initialAmount))
+  const [vat, setVat] = useState(String(initialVat))
   const [reviewNote, setReviewNote] = useState('')
   const [saving, setSaving] = useState<ReviewStatus | null>(null)
   const [error, setError] = useState('')
@@ -30,14 +42,14 @@ export function InvoiceReviewActions({ invoiceId, status, documentPathname, orig
       const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus, reviewNote: reviewNote.trim() }),
+        body: JSON.stringify({ status: nextStatus, reviewNote: reviewNote.trim(), supplier, tin, invoiceDate: invoiceDate || 'UNKNOWN', amount: Number(amount), vat: Number(vat) }),
       })
       const data = await response.json()
       if (!response.ok) {
         setError(data.error || 'The review could not be saved.')
         return
       }
-      onReviewed(invoiceId, nextStatus)
+      onReviewed(data.invoice as UpdatedInvoice)
       setReviewNote('')
     } catch {
       setError('The review could not be saved. Check your connection and try again.')
@@ -67,6 +79,12 @@ export function InvoiceReviewActions({ invoiceId, status, documentPathname, orig
       </div>
       {status !== 'pending' && <p className="mt-3 text-[11px] font-semibold text-[#678078]">Current decision: {status}. A new decision will be recorded in the audit history.</p>}
       <form className="mt-4 space-y-3" onSubmit={(event) => event.preventDefault()}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1.5 text-xs font-semibold">Supplier<input required minLength={2} maxLength={160} value={supplier} onChange={(event) => setSupplier(event.target.value)} className="h-10 rounded-lg border border-[#c8ddd2] bg-white px-3 text-xs font-normal outline-none focus:border-[#0f8062]" /></label>
+          <label className="grid gap-1.5 text-xs font-semibold">Supplier TIN<input required minLength={3} maxLength={40} value={tin} onChange={(event) => setTin(event.target.value)} className="h-10 rounded-lg border border-[#c8ddd2] bg-white px-3 text-xs font-normal outline-none focus:border-[#0f8062]" /></label>
+          <label className="grid gap-1.5 text-xs font-semibold">Invoice date<input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} className="h-10 rounded-lg border border-[#c8ddd2] bg-white px-3 text-xs font-normal outline-none focus:border-[#0f8062]" /></label>
+          <div className="grid grid-cols-2 gap-2"><label className="grid gap-1.5 text-xs font-semibold">Total (RWF)<input required type="number" min="0" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} className="h-10 w-full rounded-lg border border-[#c8ddd2] bg-white px-2 text-xs font-normal outline-none focus:border-[#0f8062]" /></label><label className="grid gap-1.5 text-xs font-semibold">VAT (RWF)<input required type="number" min="0" step="1" value={vat} onChange={(event) => setVat(event.target.value)} className="h-10 w-full rounded-lg border border-[#c8ddd2] bg-white px-2 text-xs font-normal outline-none focus:border-[#0f8062]" /></label></div>
+        </div>
         <label className="grid gap-1.5 text-xs font-semibold" htmlFor={`review-note-${invoiceId}`}>
           Review note
           <textarea

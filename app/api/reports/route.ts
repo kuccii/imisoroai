@@ -27,16 +27,19 @@ export async function GET(request: Request) {
   ])
 
   const accountById = new Map(accounts.map((account) => [account.id, account]))
-  const income = entries.reduce((sum, entry) => accountById.get(entry.accountId)?.type === 'income' ? sum + entry.credit - entry.debit : sum, 0)
-  const expenses = entries.reduce((sum, entry) => accountById.get(entry.accountId)?.type === 'expense' ? sum + entry.debit - entry.credit : sum, 0)
+  const reportableTransactionIds = new Set(transactions.filter((transaction) => transaction.source === 'manual_v2').map((transaction) => transaction.id))
+  const reportableEntries = entries.filter((entry) => reportableTransactionIds.has(entry.referenceId))
+  const income = reportableEntries.reduce((sum, entry) => accountById.get(entry.accountId)?.type === 'income' ? sum + entry.credit - entry.debit : sum, 0)
+  const expenses = reportableEntries.reduce((sum, entry) => accountById.get(entry.accountId)?.type === 'expense' ? sum + entry.debit - entry.credit : sum, 0)
   const cashAccountIds = new Set(accounts.filter((account) => account.code === '1000').map((account) => account.id))
-  const cashMovement = entries.reduce((sum, entry) => cashAccountIds.has(entry.accountId) ? sum + entry.debit - entry.credit : sum, 0)
-  const legacyPostingReviewRequired = transactions.some((transaction) => ['purchase', 'expense'].includes(transaction.type) && transaction.source !== 'manual_v2')
+  const cashMovement = reportableEntries.reduce((sum, entry) => cashAccountIds.has(entry.accountId) ? sum + entry.debit - entry.credit : sum, 0)
+  const legacyTransactionCount = transactions.filter((transaction) => transaction.source !== 'manual_v2').length
 
   return NextResponse.json({
     period,
-    metrics: { income, expenses, net: income - expenses, cash: cashMovement, transactionCount: transactions.length, ledgerEntryCount: entries.length },
-    legacyPostingReviewRequired,
+    metrics: { income, expenses, net: income - expenses, cash: cashMovement, transactionCount: reportableTransactionIds.size, ledgerEntryCount: reportableEntries.length },
+    legacyPostingReviewRequired: legacyTransactionCount > 0,
+    legacyTransactionCount,
     transactions,
   })
 }
