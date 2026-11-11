@@ -48,8 +48,8 @@ export const verification = pgTable('verification', {
 
 export const profile = pgTable('profile', {
   userId: text('userId').primaryKey(),
-  businessName: text('businessName').notNull().default('Kivu Creative Ltd'),
-  tin: text('tin').notNull().default('100023847'),
+  businessName: text('businessName').notNull().default('My business'),
+  tin: text('tin').notNull().default('PENDING'),
   phone: text('phone'),
   language: text('language').notNull().default('en'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
