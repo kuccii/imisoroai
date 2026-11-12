@@ -19,6 +19,12 @@ const saleSchema = z.object({
     declaredTaxRwf: z.number().int().min(0).max(2_000_000_000).default(0),
   }).strict()).min(1).max(50),
 }).strict().superRefine((sale, context) => {
+  sale.items.forEach((item, index) => {
+    const expectedNetRwf = Math.round(Number(item.quantity) * item.unitPriceRwf)
+    if (item.netRwf !== expectedNetRwf) {
+      context.addIssue({ code: 'custom', path: ['items', index, 'netRwf'], message: 'Line amount must equal quantity multiplied by unit price.' })
+    }
+  })
   const subtotal = sale.items.reduce((sum, item) => sum + item.netRwf, 0)
   const tax = sale.items.reduce((sum, item) => sum + item.declaredTaxRwf, 0)
   if (!Number.isSafeInteger(subtotal) || !Number.isSafeInteger(tax) || subtotal + tax > 2_000_000_000) {
@@ -54,8 +60,14 @@ export async function GET() {
 export async function POST(request: Request) {
   const userId = await getUserId()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const parsed = saleSchema.safeParse(await request.json())
-  if (!parsed.success) return NextResponse.json({ error: 'Check the sales details and confirm total equals subtotal plus declared tax.' }, { status: 400 })
+  let payload: unknown
+  try {
+    payload = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'The sales details are not valid JSON.' }, { status: 400 })
+  }
+  const parsed = saleSchema.safeParse(payload)
+  if (!parsed.success) return NextResponse.json({ error: 'Check the sales details, line amounts, and declared tax.' }, { status: 400 })
   const { items, ...details } = parsed.data
   const id = `FS-${crypto.randomUUID()}`
   const subtotalRwf = items.reduce((sum, item) => sum + item.netRwf, 0)
