@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { ensureDatabaseSchema } from '@/lib/db/bootstrap'
 import { invoiceRecord, profile } from '@/lib/db/schema'
 import { desc, eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
@@ -33,6 +34,7 @@ function parseExtractionNotes(value: string): string[] {
 }
 
 export async function getWorkspaceData() {
+  await ensureDatabaseSchema().catch((error) => console.error('[db] schema bootstrap failed', error))
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) return null
 

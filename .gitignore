@@ -7,9 +7,15 @@ __v0_jsx-dev-runtime.ts
 .vercel/
 
 # Environment variables
+.env
 .env*.local
+
+# Local database and uploaded documents
+.data/
 
 # Common ignores
 node_modules
 .next/
 .DS_Store
+# TypeScript incremental build info
+tsconfig.tsbuildinfo

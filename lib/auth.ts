@@ -9,13 +9,17 @@ const trustedOrigins = [
     .map((value) => value.startsWith('http') ? value : `https://${value}`),
 ]
 
+// Cross-site cookies are only needed inside the v0 preview iframe. On plain
+// http://localhost they break sign-in, so keep the safer default there.
+const crossSiteCookies = process.env.NODE_ENV === 'development' && Boolean(process.env.V0_RUNTIME_URL)
+
 export const auth = betterAuth({
   database: pool,
   baseURL: process.env.BETTER_AUTH_URL,
   emailAndPassword: { enabled: true, autoSignIn: true },
   trustedOrigins,
   session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
-  ...(process.env.NODE_ENV === 'development' ? {
+  ...(crossSiteCookies ? {
     advanced: { defaultCookieAttributes: { sameSite: 'none' as const, secure: true } },
   } : {}),
 })

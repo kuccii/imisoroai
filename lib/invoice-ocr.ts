@@ -18,9 +18,11 @@ export type InvoiceExtraction = z.infer<typeof invoiceExtractionSchema>
 export type InvoiceOcrIssue = 'credits_required' | 'billing_required' | 'unavailable'
 export type InvoiceMediaType = 'application/pdf' | 'image/jpeg' | 'image/png'
 
-export async function extractInvoiceDocument(bytes: Uint8Array, mediaType: InvoiceMediaType): Promise<InvoiceExtraction> {
+export const DEFAULT_OCR_MODEL = 'openai/gpt-5.4-mini'
+
+export async function extractInvoiceDocument(bytes: Uint8Array, mediaType: InvoiceMediaType, model: string = DEFAULT_OCR_MODEL): Promise<InvoiceExtraction> {
   const result = await generateText({
-    model: 'openai/gpt-5.4-mini',
+    model: model as Parameters<typeof generateText>[0]['model'],
     output: Output.object({ schema: invoiceExtractionSchema }),
     temperature: 0,
     messages: [{

@@ -1,8 +1,9 @@
-import { get } from '@vercel/blob'
 import { auth } from '@/lib/auth'
+import { getOcrSettings } from '@/lib/admin'
 import { db } from '@/lib/db'
 import { auditEvent, invoiceRecord } from '@/lib/db/schema'
 import { classifyInvoiceOcrIssue, extractInvoiceDocument, type InvoiceMediaType } from '@/lib/invoice-ocr'
+import { readStoredFile } from '@/lib/storage'
 import { and, eq, lt, ne, or } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
@@ -107,6 +108,8 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   const staleProcessingCutoff = new Date(Date.now() - 2 * 60 * 1000)
   if (existing.status !== 'pending') return NextResponse.json({ error: 'Only invoices awaiting review can be scanned again.' }, { status: 409 })
   if (existing.extractionStatus === 'extracted') return NextResponse.json({ error: 'This invoice has already been scanned.' }, { status: 409 })
+  const ocrSettings = await getOcrSettings()
+  if (!ocrSettings.enabled) return NextResponse.json({ error: 'Automatic extraction is turned off by the administrator.' }, { status: 409 })
   if (existing.extractionStatus === 'processing' && existing.updatedAt > staleProcessingCutoff) {
     return NextResponse.json({ error: 'A scan is still in progress. Wait two minutes after the upload before retrying.' }, { status: 409 })
   }
@@ -121,12 +124,12 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   if (!claimed) return NextResponse.json({ error: 'This invoice is already being scanned or has already been extracted.' }, { status: 409 })
 
   try {
-    const blob = await get(existing.blobPathname, { access: 'private' })
-    if (!blob || blob.statusCode === 304) throw new Error('Stored invoice is unavailable.')
-    const bytes = Buffer.from(await new Response(blob.stream).arrayBuffer())
+    const stored = await readStoredFile(existing.blobPathname)
+    if (!stored) throw new Error('Stored invoice is unavailable.')
+    const bytes = Buffer.from(stored.bytes)
     if (bytes.length === 0 || bytes.length > 10 * 1024 * 1024) throw new Error('Stored invoice has an invalid size.')
 
-    const extraction = await extractInvoiceDocument(bytes, existing.contentType as InvoiceMediaType)
+    const extraction = await extractInvoiceDocument(bytes, existing.contentType as InvoiceMediaType, ocrSettings.model)
     const [invoice] = await db.transaction(async (tx) => {
       const [updated] = await tx.update(invoiceRecord).set({
         supplier: extraction.supplier || 'Unknown supplier',
@@ -150,7 +153,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
         action: 'invoice_extraction_retried',
         entityType: 'invoice',
         entityId: id,
-        metadata: JSON.stringify({ extraction, sourcePathname: existing.blobPathname, automatedEligibility: false }),
+        metadata: JSON.stringify({ extraction, ocrModel: ocrSettings.model, sourcePathname: existing.blobPathname, automatedEligibility: false }),
       })
       return [updated]
     })

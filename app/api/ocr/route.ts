@@ -1,9 +1,10 @@
-import { del, put } from '@vercel/blob'
 import { auth } from '@/lib/auth'
+import { getOcrSettings } from '@/lib/admin'
 import { db } from '@/lib/db'
 import { auditEvent, invoiceRecord } from '@/lib/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { classifyInvoiceOcrIssue, extractInvoiceDocument, type InvoiceExtraction, type InvoiceMediaType } from '@/lib/invoice-ocr'
+import { deleteStoredFile, storeFile } from '@/lib/storage'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 
@@ -44,11 +45,7 @@ export async function POST(request: Request) {
   let stage: 'storage' | 'database' | 'extraction' = 'storage'
 
   try {
-    const blob = await put(`invoices/${session.user.id}/${id}-${safeName}`, bytes, {
-      access: 'private',
-      addRandomSuffix: false,
-      contentType: file.type,
-    })
+    const blob = await storeFile(`invoices/${session.user.id}/${id}-${safeName}`, bytes, file.type)
     blobPathname = blob.pathname
     blobUrl = blob.url
 
@@ -87,18 +84,22 @@ export async function POST(request: Request) {
     persisted = true
 
     stage = 'extraction'
+    const ocrSettings = await getOcrSettings()
     let extraction: InvoiceExtraction | null = null
     let ocrIssue: 'credits_required' | 'billing_required' | 'unavailable' | null = null
-    try {
-      extraction = await extractInvoiceDocument(bytes, file.type as InvoiceMediaType)
-    } catch (error) {
-      ocrIssue = classifyInvoiceOcrIssue(error)
-      console.error('[invoice-ocr] extraction failed', {
-        errorName: error instanceof Error ? error.name : 'UnknownError',
-        ocrIssue,
-        contentType: file.type,
-        fileSize: file.size,
-      })
+    if (ocrSettings.enabled) {
+      try {
+        extraction = await extractInvoiceDocument(bytes, file.type as InvoiceMediaType, ocrSettings.model)
+      } catch (error) {
+        ocrIssue = classifyInvoiceOcrIssue(error)
+        console.error('[invoice-ocr] extraction failed', {
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+          ocrIssue,
+          model: ocrSettings.model,
+          contentType: file.type,
+          fileSize: file.size,
+        })
+      }
     }
 
     const extractionFailed = extraction === null
@@ -112,11 +113,13 @@ export async function POST(request: Request) {
       currency: 'RWF',
       confidence: 0,
       evidence: 'unclear' as const,
-      notes: [ocrIssue === 'credits_required'
-        ? 'AI Gateway paid credits are required to scan this file.'
-        : ocrIssue === 'billing_required'
-          ? 'AI Gateway needs a verified payment method before scanning.'
-          : 'Automatic extraction could not read this file. Enter the values from the original document.'],
+      notes: [!ocrSettings.enabled
+        ? 'Automatic extraction is turned off by the administrator. Enter the values from the original document.'
+        : ocrIssue === 'credits_required'
+          ? 'AI Gateway paid credits are required to scan this file.'
+          : ocrIssue === 'billing_required'
+            ? 'AI Gateway needs a verified payment method before scanning.'
+            : 'Automatic extraction could not read this file. Enter the values from the original document.'],
     }
 
     const [invoice] = await db.transaction(async (tx) => {
@@ -128,7 +131,7 @@ export async function POST(request: Request) {
         amount: invoiceData.amount,
         vat: invoiceData.vat,
         currency: invoiceData.currency,
-        extractionStatus: extraction ? 'extracted' : ocrIssue || 'unavailable',
+        extractionStatus: extraction ? 'extracted' : ocrSettings.enabled ? ocrIssue || 'unavailable' : 'admin_disabled',
         extractionConfidence: extraction ? String(invoiceData.confidence) : null,
         ebmEvidence: invoiceData.evidence,
         extractionNotes: JSON.stringify(invoiceData.notes),
@@ -141,7 +144,7 @@ export async function POST(request: Request) {
         action: extraction ? 'invoice_extraction_completed' : 'invoice_extraction_failed',
         entityType: 'invoice',
         entityId: id,
-        metadata: JSON.stringify({ extraction, extractionFailed, ocrIssue, sourcePathname: blobPathname, automatedEligibility: false }),
+        metadata: JSON.stringify({ extraction, extractionFailed, ocrIssue, ocrModel: ocrSettings.model, ocrEnabled: ocrSettings.enabled, sourcePathname: blobPathname, automatedEligibility: false }),
       })
       return [updated]
     })
@@ -154,7 +157,7 @@ export async function POST(request: Request) {
       contentType: file.type,
       fileSize: file.size,
     })
-    if (blobUrl && !persisted) await del(blobUrl).catch(() => undefined)
+    if (blobPathname && !persisted) await deleteStoredFile({ pathname: blobPathname, url: blobUrl ?? undefined }).catch(() => undefined)
     const message = stage === 'storage'
       ? 'Private invoice storage is temporarily unavailable. Try again shortly.'
       : stage === 'database'
