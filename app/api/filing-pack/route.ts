@@ -8,6 +8,15 @@ import { z } from 'zod'
 
 const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
 
+function parseExtractionNotes(value: string) {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.filter((note): note is string => typeof note === 'string').slice(0, 8) : []
+  } catch {
+    return []
+  }
+}
+
 function isValidIsoDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
   const date = new Date(`${value}T00:00:00.000Z`)
@@ -39,6 +48,7 @@ export async function GET(request: Request) {
   const eligiblePurchases = invoices.filter((invoice) => invoice.status === 'supported')
   const outstandingReview = invoices.filter((invoice) => invoice.status === 'pending')
   const unsupported = invoices.filter((invoice) => invoice.status === 'unsupported')
+  const scanIssues = invoices.filter((invoice) => invoice.status !== 'unsupported' && ['credits_required', 'billing_required', 'unavailable', 'legacy'].includes(invoice.extractionStatus))
   const sales = transactions.filter((transaction) => transaction.type === 'sale')
   const submissionBySale = new Map(submissions.map((submission) => [submission.saleId, submission]))
   const fiscalizedSales = storedFiscalizedSales.filter((sale) => {
@@ -58,8 +68,9 @@ export async function GET(request: Request) {
       undatedPurchaseCount: undatedInvoices.length,
       supportedPurchaseCount: eligiblePurchases.length,
       pendingReviewCount: outstandingReview.length,
+      scanIssueCount: scanIssues.length,
       unsupportedPurchaseCount: unsupported.length,
-      supportedInputVatRwf: eligiblePurchases.reduce((sum, invoice) => sum + invoice.vat, 0),
+      reviewedPurchaseVatRwf: eligiblePurchases.reduce((sum, invoice) => sum + invoice.vat, 0),
       salesCount: sales.length,
       manualSalesGrossRwf: sales.reduce((sum, transaction) => sum + transaction.amount, 0),
       fiscalizedSalesCount: fiscalizedSales.length,
@@ -68,18 +79,19 @@ export async function GET(request: Request) {
     },
     checklist: [
       { id: 'taxpayer', label: 'Confirm taxpayer TIN and period in RRA eTax', status: taxpayerTin ? 'review' : 'blocked' },
-      { id: 'purchases', label: 'Review manually approved purchase invoices and input VAT', status: outstandingReview.length || unsupported.length || undatedInvoices.length ? 'review' : 'ready' },
+      { id: 'invoice-scan', label: 'Resolve scan issues and verify invoice numbers, TINs, dates, and EBM evidence', status: scanIssues.length || outstandingReview.length ? 'review' : 'ready' },
+      { id: 'purchases', label: 'Check reviewed purchase invoices against the current VAT annexure', status: outstandingReview.length || unsupported.length || undatedInvoices.length ? 'review' : 'ready' },
       { id: 'sales', label: 'Reconcile sales with EBM/EIS records and output VAT', status: 'required' },
       { id: 'fiscalized-sales', label: 'Verify fiscalized sales and RRA receipt numbers', status: fiscalizedSales.length ? 'review' : 'required' },
       { id: 'submit', label: 'Review and submit the return in RRA eTax', status: 'external' },
     ],
-    purchaseInvoices: invoices.map(({ id, supplier, tin, invoiceDate, amount, vat, status, originalFilename }) => ({ id, supplier, supplierTin: tin, invoiceDate, amountRwf: amount, vatRwf: vat, reviewStatus: status, originalFilename })),
-    undatedPurchaseInvoices: undatedInvoices.map(({ id, supplier, tin, invoiceDate, amount, vat, status, originalFilename }) => ({ id, supplier, supplierTin: tin, invoiceDate, amountRwf: amount, vatRwf: vat, reviewStatus: status, originalFilename })),
+    purchaseInvoices: invoices.map(({ id, supplier, tin, invoiceNumber, currency, invoiceDate, amount, vat, status, ebmEvidence, extractionStatus, extractionConfidence, extractionNotes, originalFilename }) => ({ id, supplier, supplierTin: tin, invoiceNumber, currency, invoiceDate, amountRwf: amount, vatRwf: vat, ebmEvidence, extractionStatus, extractionConfidence: extractionConfidence === null ? null : Number(extractionConfidence), extractionNotes: parseExtractionNotes(extractionNotes), reviewStatus: status === 'supported' ? 'included_in_workpapers' : status === 'unsupported' ? 'excluded' : 'needs_human_review', originalFilename })),
+    undatedPurchaseInvoices: undatedInvoices.map(({ id, supplier, tin, invoiceNumber, currency, invoiceDate, amount, vat, status, ebmEvidence, extractionStatus, extractionConfidence, extractionNotes, originalFilename }) => ({ id, supplier, supplierTin: tin, invoiceNumber, currency, invoiceDate, amountRwf: amount, vatRwf: vat, ebmEvidence, extractionStatus, extractionConfidence: extractionConfidence === null ? null : Number(extractionConfidence), extractionNotes: parseExtractionNotes(extractionNotes), reviewStatus: status === 'supported' ? 'included_in_workpapers' : status === 'unsupported' ? 'excluded' : 'needs_human_review', originalFilename })),
     recordedSales: sales.map(({ id, counterparty, reference, transactionDate, amount }) => ({ id, counterparty, reference, transactionDate, amountRwf: amount, fiscalizationStatus: 'not_fiscalized' })),
     fiscalizedSales: fiscalizedSales.map(({ id, counterparty, saleDate, totalRwf }) => {
       const submission = submissionBySale.get(id)!
       return { id, counterparty, saleDate, totalRwf, fiscalReceiptNumber: submission.fiscalReceiptNumber, externalCorrelationId: submission.externalCorrelationId }
     }),
-    notice: 'This preparation pack is a review aid, not an RRA-approved return or proof of filing. Input VAT depends on a human reviewer decision; output VAT and statutory form fields are not calculated. Undated or invalid-date invoices are listed separately and excluded from the selected-period totals. Verify all figures and due dates against current RRA eTax guidance before filing.',
+    notice: 'This internal workpaper is not the official RRA VAT annexure, an RRA-approved return, or proof of filing. Human review organizes purchase evidence only; it does not establish tax eligibility. Output VAT and statutory form fields are not calculated. Undated invoices are listed separately and excluded from period totals. Download and validate the current annexure in RRA eTax, reconcile figures there, then submit through the official portal.',
   })
 }

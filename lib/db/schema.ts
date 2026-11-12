@@ -68,6 +68,12 @@ export const invoiceRecord = pgTable('invoice_record', {
   blobPathname: text('blobPathname'),
   originalFilename: text('originalFilename'),
   contentType: text('contentType'),
+  invoiceNumber: text('invoiceNumber').notNull().default(''),
+  currency: text('currency').notNull().default('RWF'),
+  extractionStatus: text('extractionStatus').notNull().default('legacy'),
+  extractionConfidence: numeric('extractionConfidence'),
+  ebmEvidence: text('ebmEvidence').notNull().default('unclear'),
+  extractionNotes: text('extractionNotes').notNull().default('[]'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })
