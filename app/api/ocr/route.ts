@@ -30,6 +30,16 @@ function hasExpectedSignature(bytes: Buffer, contentType: string) {
   return false
 }
 
+function isGatewayBillingVerificationRequired(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const details = error as { statusCode?: unknown; message?: unknown; cause?: unknown }
+  const cause = details.cause && typeof details.cause === 'object'
+    ? details.cause as { data?: { error?: { type?: unknown } } }
+    : undefined
+  return cause?.data?.error?.type === 'customer_verification_required'
+    || (details.statusCode === 403 && typeof details.message === 'string' && details.message.includes('valid credit card on file'))
+}
+
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -66,6 +76,7 @@ export async function POST(request: Request) {
     blobUrl = blob.url
 
     let extraction: z.infer<typeof invoiceSchema> | null = null
+    let ocrIssue: 'billing_required' | 'unavailable' | null = null
     try {
       const mediaType = file.type as 'application/pdf' | 'image/jpeg' | 'image/png'
       const result = await generateText({
@@ -82,8 +93,10 @@ export async function POST(request: Request) {
       })
       extraction = result.output
     } catch (error) {
+      ocrIssue = isGatewayBillingVerificationRequired(error) ? 'billing_required' : 'unavailable'
       console.error('[invoice-ocr] extraction failed', {
         errorName: error instanceof Error ? error.name : 'UnknownError',
+        ocrIssue,
         contentType: file.type,
         fileSize: file.size,
       })
@@ -132,7 +145,7 @@ export async function POST(request: Request) {
     })
 
     persisted = true
-    return NextResponse.json({ invoice, extraction: extractionFailed ? null : extraction, extractionFailed, requiresReview: true }, { status: 201 })
+    return NextResponse.json({ invoice, extraction: extractionFailed ? null : extraction, extractionFailed, ocrIssue, requiresReview: true }, { status: 201 })
   } catch (error) {
     console.error('[invoice-ocr] upload failed', {
       stage,
