@@ -18,7 +18,7 @@ Next.js 16, React, TypeScript, Tailwind CSS, Express, Zod, Prisma, PostgreSQL, J
 4. Create the tables with `pnpm db:init`. This is idempotent and also runs automatically before auth requests, so a fresh database never leaves the app empty.
 5. Run the app with `pnpm dev`.
 
-Invoices are stored in `.data/uploads` when `BLOB_READ_WRITE_TOKEN` is not set, so uploads work without Vercel Blob. Set `AI_GATEWAY_API_KEY` to enable AI extraction; without it uploads still save and are queued for manual entry.
+Invoices are stored in `.data/uploads` when `BLOB_READ_WRITE_TOKEN` is not set, so uploads work without Vercel Blob. Extraction runs on a direct Google AI Studio key (`GOOGLE_GENERATIVE_AI_API_KEY`, default model `google/gemini-3.1-flash-lite`) and falls back to the AI Gateway (`AI_GATEWAY_API_KEY`) when no Google key is present. Without either key, uploads still save and are queued for manual entry.
 
 The separate `backend/` Express placeholder is not required for the Next.js app.
 

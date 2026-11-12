@@ -4,7 +4,7 @@ import { ensureDatabaseSchema } from '@/lib/db/bootstrap'
 import { appSetting, user } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
-import { DEFAULT_OCR_MODEL } from '@/lib/invoice-ocr'
+import { defaultOcrModel, googleOcrAvailable } from '@/lib/invoice-ocr'
 
 export type AdminAccess =
   | { ok: true; email: string; role: string; userId: string; name: string }
@@ -15,14 +15,21 @@ export type OcrSettings = {
   enabled: boolean
 }
 
-export const DEFAULT_OCR_SETTINGS: OcrSettings = { model: DEFAULT_OCR_MODEL, enabled: true }
+function defaultOcrSettings(): OcrSettings {
+  return { model: defaultOcrModel(), enabled: true }
+}
+
+export const DEFAULT_OCR_SETTINGS: OcrSettings = defaultOcrSettings()
 
 // Gateway model ids the app ships with. Administrators can enter any other
 // `provider/model` id, since new gateway models appear regularly.
 export const KNOWN_OCR_MODELS = [
-  { id: 'openai/gpt-5.4-mini', label: 'GPT-5.4 mini', note: 'Current default in this workspace. Fast and low cost.' },
-  { id: 'openai/gpt-5-mini', label: 'GPT-5 mini', note: 'Used by the in-app tax assistant.' },
-  { id: 'openai/gpt-4.1-mini', label: 'GPT-4.1 mini', note: 'Older generation; useful fallback.' },
+  { id: 'google/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Google AI Studio)', note: googleOcrAvailable() ? 'Active default. Fast, accurate, and needs no Gateway credits.' : 'Add GOOGLE_GENERATIVE_AI_API_KEY to enable direct Google extraction.' },
+  { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash preview', note: 'Alternative direct Google model; slightly slower.' },
+  { id: 'google/gemini-3.5-flash', label: 'Gemini 3.5 Flash', note: 'Large direct Google model; can take minutes per scan.' },
+  { id: 'openai/gpt-5.4-mini', label: 'GPT-5.4 mini (AI Gateway)', note: 'Requires paid AI Gateway credits.' },
+  { id: 'openai/gpt-5-mini', label: 'GPT-5 mini (AI Gateway)', note: 'Used by the in-app tax assistant; requires Gateway credits.' },
+  { id: 'openai/gpt-4.1-mini', label: 'GPT-4.1 mini (AI Gateway)', note: 'Older generation; requires Gateway credits.' },
 ]
 
 const OCR_SETTING_KEY = 'ocr'
@@ -40,15 +47,16 @@ export function isValidOcrModel(value: string) {
 }
 
 function parseOcrSettings(value: string | null | undefined): OcrSettings {
-  if (!value) return DEFAULT_OCR_SETTINGS
+  const fallback = defaultOcrSettings()
+  if (!value) return fallback
   try {
     const parsed: unknown = JSON.parse(value)
-    if (!parsed || typeof parsed !== 'object') return DEFAULT_OCR_SETTINGS
+    if (!parsed || typeof parsed !== 'object') return fallback
     const record = parsed as { model?: unknown; enabled?: unknown }
-    const model = typeof record.model === 'string' && isValidOcrModel(record.model) ? record.model : DEFAULT_OCR_SETTINGS.model
-    return { model, enabled: typeof record.enabled === 'boolean' ? record.enabled : DEFAULT_OCR_SETTINGS.enabled }
+    const model = typeof record.model === 'string' && isValidOcrModel(record.model) ? record.model : fallback.model
+    return { model, enabled: typeof record.enabled === 'boolean' ? record.enabled : fallback.enabled }
   } catch {
-    return DEFAULT_OCR_SETTINGS
+    return fallback
   }
 }
 
@@ -60,7 +68,7 @@ export async function getOcrSettings(): Promise<OcrSettings> {
   } catch (error) {
     // Never block invoice uploads because the settings table is unavailable.
     console.error('[admin] failed to load OCR settings, using defaults', error)
-    return DEFAULT_OCR_SETTINGS
+    return defaultOcrSettings()
   }
 }
 
