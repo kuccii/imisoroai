@@ -1,6 +1,16 @@
 packages:
   - '.'
 
+allowBuilds:
+  esbuild: set this to true or false
+
 minimumReleaseAgeExclude:
   - '@next/*'
   - next
+  - '@ai-sdk/gateway@4.0.144'
+  - '@ai-sdk/google@4.0.119'
+  - '@ai-sdk/mcp@2.0.98'
+  - '@ai-sdk/provider-utils@5.0.80'
+  - '@ai-sdk/provider@4.0.38'
+  - '@ai-sdk/react@4.0.175'
+  - ai@7.0.171
