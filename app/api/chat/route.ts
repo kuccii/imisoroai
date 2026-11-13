@@ -1,44 +1,86 @@
-import { generateText } from 'ai'
+// app/api/chat/route.ts
+import { convertToModelMessages, streamText, type UIMessage } from 'ai'
+import { google } from '@ai-sdk/google'
 
 export const maxDuration = 30
 
-const system = `You are Imisoro AI, a careful Rwanda tax compliance assistant for VAT-registered SMEs. Help users understand invoice extraction, supported versus unsupported expenses, VAT input/output, RRA e-Tax exports, and filing deadlines. Give practical, concise answers in the user's language when possible (English, French, or Kinyarwanda). Do not invent legal certainty: explain that your guidance is informational and recommend checking current RRA guidance or an accountant for disputes. Never request passwords, API keys, or sensitive credentials.`
+// Calls Gemini directly with your own key (GOOGLE_GENERATIVE_AI_API_KEY in .env.local),
+// so it doesn't depend on Vercel AI Gateway credentials.
+// Swap the model ID for whichever Gemini model your key has access to.
+const MODEL = google('gemini-3.5-flash')
+const MAX_MESSAGES = 8
+const MAX_TEXT_LENGTH = 2000
+
+const system = `You are Imisoro AI, a careful Rwanda tax compliance assistant for VAT-registered SMEs. Help users understand invoice extraction, supported versus unsupported expenses, VAT input/output, RRA e-Tax exports, and filing deadlines.
+
+Rules:
+- Give practical, concise answers in the user's language when possible (English, French, or Kinyarwanda).
+- Format answers in Markdown: short paragraphs, bullet lists, and bold for key terms. Keep it scannable.
+- Your guidance is informational. Do not invent legal certainty; for disputes or edge cases, recommend checking current RRA guidance or an accountant.
+- Do not state specific tax rates, deadlines, thresholds, or figures unless the user supplied them or you are confident they are current. If unsure, say so and point to RRA.
+- Never make up data about the user's business (invoices, balances, filing dates). You do not have access to their records in this chat.
+- Never request passwords, API keys, or other sensitive credentials.`
+
+function textOf(message: UIMessage): string {
+  return message.parts
+    .map(part => (part.type === 'text' ? part.text : ''))
+    .join('')
+}
 
 export async function POST(request: Request) {
+  let body: { messages?: unknown }
   try {
-    const body = await request.json()
-    const messages = Array.isArray(body?.messages) ? body.messages : []
-    const latest = messages.at(-1)?.content
-    if (typeof latest !== 'string' || latest.trim().length < 1) {
-      return Response.json({ error: 'A message is required.' }, { status: 400 })
-    }
-    if (latest.length > 2000) {
-      return Response.json({ error: 'Message is too long.' }, { status: 400 })
-    }
-    try {
-      const result = await generateText({
-        model: 'openai/gpt-5-mini',
-        system,
-        messages: messages.slice(-8).map((message: { role: string; content: string }) => ({
-          role: message.role === 'assistant' ? 'assistant' : 'user',
-          content: String(message.content).slice(0, 2000),
-        })),
-      })
-      return Response.json({ message: result.text, source: 'ai-gateway' })
-    } catch (aiError) {
-      console.warn('[v0] AI Gateway unavailable, using verified tax guidance fallback', aiError)
-      const question = latest.toLowerCase()
-      const message = question.includes('vat')
-        ? 'Net VAT is calculated as output VAT minus eligible input VAT. For example, RWF 0 output VAT minus RWF 4,820,000 input VAT gives an input credit of RWF 4,820,000 before adjustments. Confirm the period and eligibility in your RRA records.'
-        : question.includes('supported') || question.includes('ebm')
-          ? 'An expense is usually supported when the invoice has valid EBM evidence, a clear supplier TIN, date, description, and VAT details. Missing EBM evidence or an unclear supplier can make it unsupported. Review the source document before exporting to e-Tax.'
-          : question.includes('deadline') || question.includes('due')
-            ? 'For this workspace, the next tracked deadline is the August VAT return on 10 September 2026, followed by withholding tax on 15 September 2026. Enable reminders and verify current RRA dates before filing.'
-            : 'I can help explain VAT, EBM evidence, supported and unsupported expenses, invoice reviews, e-Tax exports, and Rwanda tax deadlines. Try asking “How is net VAT calculated?”'
-      return Response.json({ message, source: 'verified-fallback' })
-    }
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid JSON body.' }, { status: 400 })
+  }
+
+  if (!Array.isArray(body.messages)) {
+    return Response.json({ error: 'A message is required.' }, { status: 400 })
+  }
+
+  // Keep only well-formed user/assistant text turns, then trim to recent history
+  const cleaned = (body.messages as UIMessage[])
+    .filter(m => m && (m.role === 'user' || m.role === 'assistant') && Array.isArray(m.parts))
+    .map(m => ({ ...m, parts: [{ type: 'text' as const, text: textOf(m).trim() }] }))
+    .filter(m => m.parts[0].text.length > 0)
+
+  const recent = cleaned.slice(-MAX_MESSAGES)
+  while (recent.length && recent[0].role !== 'user') recent.shift()
+
+  const latest = recent.at(-1)
+  if (!latest || latest.role !== 'user') {
+    return Response.json({ error: 'A message is required.' }, { status: 400 })
+  }
+  if (latest.parts[0].text.length > MAX_TEXT_LENGTH) {
+    return Response.json({ error: 'Message is too long.' }, { status: 400 })
+  }
+
+  const trimmed = recent.map(m => ({
+    ...m,
+    parts: [{ type: 'text' as const, text: m.parts[0].text.slice(0, MAX_TEXT_LENGTH) }],
+  }))
+
+  try {
+    const result = streamText({
+      model: MODEL,
+      system,
+      messages: await convertToModelMessages(trimmed),
+      abortSignal: request.signal, // stops generation when the user clicks Stop
+    })
+
+    return result.toUIMessageStreamResponse({
+      // Fail honestly: never substitute canned tax figures or dates for a model answer.
+      onError: error => {
+        console.error('[chat] stream error', error)
+        return 'The assistant is unavailable right now. Please try again in a moment.'
+      },
+    })
   } catch (error) {
-    console.error('[v0] AI chat error', error)
-    return Response.json({ error: 'The assistant is unavailable right now. Please try again.' }, { status: 500 })
+    console.error('[chat] AI request failed', error)
+    return Response.json(
+      { error: 'The assistant is unavailable right now. Please try again in a moment.' },
+      { status: 503 },
+    )
   }
 }

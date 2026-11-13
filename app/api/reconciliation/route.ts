@@ -1,13 +1,13 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { auditEvent, businessTransaction } from '@/lib/db/schema'
+import { invoiceRecord, fiscalSale, auditEvent } from '@/lib/db/schema'
 import { and, eq, or } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 const reconciliationSchema = z.object({
-  transactionId: z.string().min(1).max(200),
+  invoiceId: z.string().min(1).max(200),
   statementReference: z.string().trim().min(3).max(120),
   statementDate: z.string().date(),
   statementAmount: z.number().int().positive().max(1_000_000_000),
@@ -17,15 +17,26 @@ const reconciliationSchema = z.object({
 export async function GET() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const storedItems = await db.select().from(businessTransaction).where(and(
-    eq(businessTransaction.userId, session.user.id),
-    or(
-      eq(businessTransaction.status, 'unmatched'),
-      and(eq(businessTransaction.status, 'matched'), eq(businessTransaction.source, 'manual')),
-    ),
-  ))
-  const items = storedItems.map((item) => ({ ...item, needsEvidence: true }))
-  return NextResponse.json({ items, matchMethod: 'manual_evidence' })
+
+  const [invoices] = await Promise.all([
+    db.select().from(invoiceRecord).where(eq(invoiceRecord.userId, session.user.id)),
+  ])
+
+  const unmatched = invoices.filter(
+    (invoice) => invoice.status === 'pending' || invoice.extractionStatus === 'manual entry needed'
+  )
+
+  const items = unmatched.map((invoice) => ({
+    id: invoice.id,
+    supplier: invoice.supplier,
+    amount: invoice.amount,
+    vat: invoice.vat,
+    status: invoice.status,
+    extractionStatus: invoice.extractionStatus,
+    needsEvidence: true,
+  }))
+
+  return NextResponse.json({ items, matchMethod: 'invoice_evidence' })
 }
 
 export async function PATCH(request: Request) {
@@ -36,52 +47,45 @@ export async function PATCH(request: Request) {
   try {
     input = await request.json()
   } catch {
-    return NextResponse.json({ error: 'Enter the bank or Mobile Money statement details.' }, { status: 400 })
+    return NextResponse.json({ error: 'Enter invoice ID, statement reference, date, amount, and confirmation.' }, { status: 400 })
   }
 
   const parsed = reconciliationSchema.safeParse(input)
-  if (!parsed.success) return NextResponse.json({ error: 'Enter a statement reference, date, amount, and confirmation.' }, { status: 400 })
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Enter invoice ID, statement reference, date, amount, and confirmation.' }, { status: 400 })
+  }
 
-  const result = await db.transaction(async (tx) => {
-    const [transaction] = await tx.select().from(businessTransaction).where(and(
-      eq(businessTransaction.id, parsed.data.transactionId),
-      eq(businessTransaction.userId, session.user.id),
-      or(
-        eq(businessTransaction.status, 'unmatched'),
-        and(eq(businessTransaction.status, 'matched'), eq(businessTransaction.source, 'manual')),
-      ),
-    )).limit(1)
-    if (!transaction) return { kind: 'missing' as const }
-    if (transaction.amount !== parsed.data.statementAmount) return { kind: 'amount_mismatch' as const }
+  const [invoice] = await db.select().from(invoiceRecord).where(and(
+    eq(invoiceRecord.id, parsed.data.invoiceId),
+    eq(invoiceRecord.userId, session.user.id),
+  )).limit(1)
 
-    const [item] = await tx.update(businessTransaction).set({ status: 'matched_with_evidence' }).where(and(
-      eq(businessTransaction.id, transaction.id),
-      eq(businessTransaction.userId, session.user.id),
-      or(
-        eq(businessTransaction.status, 'unmatched'),
-        and(eq(businessTransaction.status, 'matched'), eq(businessTransaction.source, 'manual')),
-      ),
-    )).returning()
-    if (!item) return { kind: 'missing' as const }
+  if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
 
-    await tx.insert(auditEvent).values({
-      id: `AUD-${crypto.randomUUID()}`,
-      userId: session.user.id,
-      action: 'transaction_manually_reconciled',
-      entityType: 'business_transaction',
-      entityId: item.id,
-      metadata: JSON.stringify({
-        statementReference: parsed.data.statementReference,
-        statementDate: parsed.data.statementDate,
-        statementAmountRwf: parsed.data.statementAmount,
-        verificationMethod: 'user_attested',
-      }),
-    })
+  if (invoice.amount !== parsed.data.statementAmount) {
+    return NextResponse.json({ error: 'The statement amount must exactly match the invoice amount.' }, { status: 409 })
+  }
 
-    return { kind: 'matched' as const, item }
+  // Upsert: mark invoice as reviewed/ supported if confirmed
+  await db.update(invoiceRecord).set({
+    status: 'supported',
+    extractionStatus: 'reviewed_manual',
+  }).where(eq(invoiceRecord.id, parsed.data.invoiceId))
+
+  // Log audit event
+  await db.insert(auditEvent).values({
+    id: `AUD-${crypto.randomUUID()}`,
+    userId: session.user.id,
+    action: 'invoice_reconciled',
+    entityType: 'invoice_record',
+    entityId: invoice.id,
+    metadata: JSON.stringify({
+      statementReference: parsed.data.statementReference,
+      statementDate: parsed.data.statementDate,
+      statementAmountRwf: parsed.data.statementAmount,
+      verificationMethod: 'user_attested',
+    }),
   })
 
-  if (result.kind === 'missing') return NextResponse.json({ error: 'Unmatched transaction not found.' }, { status: 404 })
-  if (result.kind === 'amount_mismatch') return NextResponse.json({ error: 'The statement amount must exactly match the transaction amount.' }, { status: 409 })
-  return NextResponse.json({ item: result.item, verificationMethod: 'user_attested' })
-}
+  return NextResponse.json({ item: { id: invoice.id, supplier: invoice.supplier, status: 'supported' }, verificationMethod: 'user_attested' })
+}

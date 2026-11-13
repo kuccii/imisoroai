@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { businessTransaction, ledgerAccount, ledgerEntry } from '@/lib/db/schema'
+import { invoiceRecord } from '@/lib/db/schema'
 import { and, eq, gte, lt } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
@@ -20,26 +20,34 @@ export async function GET(request: Request) {
   endDate.setUTCMonth(endDate.getUTCMonth() + 1)
   const until = endDate.toISOString().slice(0, 10)
   const userId = session.user.id
-  const [transactions, entries, accounts] = await Promise.all([
-    db.select().from(businessTransaction).where(and(eq(businessTransaction.userId, userId), gte(businessTransaction.transactionDate, from), lt(businessTransaction.transactionDate, until))),
-    db.select().from(ledgerEntry).where(and(eq(ledgerEntry.userId, userId), gte(ledgerEntry.entryDate, from), lt(ledgerEntry.entryDate, until))),
-    db.select().from(ledgerAccount).where(eq(ledgerAccount.userId, userId)),
+
+  const [invoices] = await Promise.all([
+    db.select().from(invoiceRecord).where(and(eq(invoiceRecord.userId, userId), gte(invoiceRecord.invoiceDate, from), lt(invoiceRecord.invoiceDate, until)))
   ])
 
-  const accountById = new Map(accounts.map((account) => [account.id, account]))
-  const reportableTransactionIds = new Set(transactions.filter((transaction) => transaction.source === 'manual_v2').map((transaction) => transaction.id))
-  const reportableEntries = entries.filter((entry) => reportableTransactionIds.has(entry.referenceId))
-  const income = reportableEntries.reduce((sum, entry) => accountById.get(entry.accountId)?.type === 'income' ? sum + entry.credit - entry.debit : sum, 0)
-  const expenses = reportableEntries.reduce((sum, entry) => accountById.get(entry.accountId)?.type === 'expense' ? sum + entry.debit - entry.credit : sum, 0)
-  const cashAccountIds = new Set(accounts.filter((account) => account.code === '1000').map((account) => account.id))
-  const cashMovement = reportableEntries.reduce((sum, entry) => cashAccountIds.has(entry.accountId) ? sum + entry.debit - entry.credit : sum, 0)
-  const legacyTransactionCount = transactions.filter((transaction) => transaction.source !== 'manual_v2').length
+  const totalInvoices = invoices.length
+  const supportedCount = invoices.filter((i) => i.status === 'supported').length
+  const pendingCount = invoices.filter((i) => i.status === 'pending').length
+  const unsupportedCount = invoices.filter((i) => i.status === 'unsupported').length
+  totalVat = invoices.reduce((sum, i) => sum + i.vat, 0)
+
+  const byExtractionStatus = {
+    extracted: invoices.filter((i) => i.extractionStatus === 'extracted').length,
+    reviewed_manual: invoices.filter((i) => i.extractionStatus === 'reviewed_manual').length,
+    credits_required: invoices.filter((i) => i.extractionStatus === 'credits_required').length,
+    processing: invoices.filter((i) => i.extractionStatus === 'processing').length,
+    'manual entry needed': invoices.filter((i) => i.extractionStatus === 'manual entry needed').length,
+  }
 
   return NextResponse.json({
     period,
-    metrics: { income, expenses, net: income - expenses, cash: cashMovement, transactionCount: reportableTransactionIds.size, ledgerEntryCount: reportableEntries.length },
-    legacyPostingReviewRequired: legacyTransactionCount > 0,
-    legacyTransactionCount,
-    transactions,
+    metrics: {
+      totalInvoices,
+      supportedCount,
+      pendingCount,
+      unsupportedCount,
+      totalVat,
+      byExtractionStatus,
+    },
   })
-}
+}
