@@ -1,2 +1,5 @@
-import ImisoroApp from '@/components/imisoro-app'
-export default function DeadlinesPage() { return <ImisoroApp initialView="Deadlines" /> }
+import WorkspaceRoute from '@/components/workspace-route'
+
+export default function DeadlinesPage() {
+  return <WorkspaceRoute initialView="Deadlines" />
+}

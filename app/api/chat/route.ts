@@ -1,13 +1,11 @@
 // app/api/chat/route.ts
-import { convertToModelMessages, streamText, type UIMessage } from 'ai'
-import { google } from '@ai-sdk/google'
+import { convertToModelMessages, gateway, streamText, type UIMessage } from 'ai'
+import { auth } from '@/lib/auth'
+import { headers } from 'next/headers'
 
 export const maxDuration = 30
 
-// Calls Gemini directly with your own key (GOOGLE_GENERATIVE_AI_API_KEY in .env.local),
-// so it doesn't depend on Vercel AI Gateway credentials.
-// Swap the model ID for whichever Gemini model your key has access to.
-const MODEL = google('gemini-3.5-flash')
+const MODEL = gateway('google/gemini-3.5-flash')
 const MAX_MESSAGES = 8
 const MAX_TEXT_LENGTH = 2000
 
@@ -28,6 +26,9 @@ function textOf(message: UIMessage): string {
 }
 
 export async function POST(request: Request) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
   let body: { messages?: unknown }
   try {
     body = await request.json()

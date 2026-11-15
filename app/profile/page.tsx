@@ -1,2 +1,5 @@
-import ImisoroApp from '@/components/imisoro-app'
-export default function ProfilePage() { return <ImisoroApp initialView="Profile" /> }
+import WorkspaceRoute from '@/components/workspace-route'
+
+export default function ProfilePage() {
+  return <WorkspaceRoute initialView="Profile" />
+}

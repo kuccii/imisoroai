@@ -1,5 +1,4 @@
-import { google } from '@ai-sdk/google'
-import { generateText, Output } from 'ai'
+import { generateText, gateway, Output } from 'ai'
 import { z } from 'zod'
 
 export const invoiceExtractionSchema = z.object({
@@ -19,36 +18,16 @@ export type InvoiceExtraction = z.infer<typeof invoiceExtractionSchema>
 export type InvoiceOcrIssue = 'credits_required' | 'billing_required' | 'unavailable'
 export type InvoiceMediaType = 'application/pdf' | 'image/jpeg' | 'image/png'
 
-// Used when the request goes through the Vercel AI Gateway.
 export const DEFAULT_OCR_MODEL = 'openai/gpt-5.4-mini'
-// Used when a direct Google AI Studio key is configured.
-// Flash-lite answers in a few seconds; the larger flashes can take minutes on
-// scanned documents, which would exceed the upload route's time limit.
-export const DEFAULT_GOOGLE_OCR_MODEL = 'google/gemini-3.1-flash-lite'
 
-export function googleOcrAvailable() {
-  return Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY)
-}
-
-/**
- * The model a workspace scans with when no administrator has chosen one.
- * A direct Google key is preferred because it does not depend on Gateway
- * credits, which is why uploaded invoices used to stay empty.
- */
 export function defaultOcrModel() {
-  return googleOcrAvailable() ? DEFAULT_GOOGLE_OCR_MODEL : DEFAULT_OCR_MODEL
+  return DEFAULT_OCR_MODEL
 }
 
 type TextModel = Parameters<typeof generateText>[0]['model']
 
 function resolveModel(model: string): TextModel {
-  const prefix = 'google/'
-  // The Google provider ships its own copy of the provider spec types, so the
-  // model is adapted here once instead of casting at every call site.
-  if (model.startsWith(prefix) && googleOcrAvailable()) {
-    return google(model.slice(prefix.length)) as unknown as TextModel
-  }
-  return model as TextModel
+  return gateway(model)
 }
 
 export async function extractInvoiceDocument(bytes: Uint8Array, mediaType: InvoiceMediaType, model: string = defaultOcrModel()): Promise<InvoiceExtraction> {

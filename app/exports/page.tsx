@@ -1,2 +1,5 @@
-import ImisoroApp from '@/components/imisoro-app'
-export default function ExportsPage() { return <ImisoroApp initialView="Exports" /> }
+import WorkspaceRoute from '@/components/workspace-route'
+
+export default function ExportsPage() {
+  return <WorkspaceRoute initialView="Exports" />
+}

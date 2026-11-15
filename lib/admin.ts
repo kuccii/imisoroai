@@ -4,7 +4,7 @@ import { ensureDatabaseSchema } from '@/lib/db/bootstrap'
 import { appSetting, user } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
-import { defaultOcrModel, googleOcrAvailable } from '@/lib/invoice-ocr'
+import { defaultOcrModel } from '@/lib/invoice-ocr'
 
 export type AdminAccess =
   | { ok: true; email: string; role: string; userId: string; name: string }
@@ -24,12 +24,11 @@ export const DEFAULT_OCR_SETTINGS: OcrSettings = defaultOcrSettings()
 // Gateway model ids the app ships with. Administrators can enter any other
 // `provider/model` id, since new gateway models appear regularly.
 export const KNOWN_OCR_MODELS = [
-  { id: 'google/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Google AI Studio)', note: googleOcrAvailable() ? 'Active default. Fast, accurate, and needs no Gateway credits.' : 'Add GOOGLE_GENERATIVE_AI_API_KEY to enable direct Google extraction.' },
-  { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash preview', note: 'Alternative direct Google model; slightly slower.' },
-  { id: 'google/gemini-3.5-flash', label: 'Gemini 3.5 Flash', note: 'Large direct Google model; can take minutes per scan.' },
-  { id: 'openai/gpt-5.4-mini', label: 'GPT-5.4 mini (AI Gateway)', note: 'Requires paid AI Gateway credits.' },
-  { id: 'openai/gpt-5-mini', label: 'GPT-5 mini (AI Gateway)', note: 'Used by the in-app tax assistant; requires Gateway credits.' },
-  { id: 'openai/gpt-4.1-mini', label: 'GPT-4.1 mini (AI Gateway)', note: 'Older generation; requires Gateway credits.' },
+  { id: 'openai/gpt-5.4-mini', label: 'GPT-5.4 mini (Vercel AI Gateway)', note: 'Default image-capable model; requires AI Gateway credits.' },
+  { id: 'google/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Vercel AI Gateway)', note: 'Fast image-capable alternative; requires AI Gateway credits.' },
+  { id: 'google/gemini-3.5-flash', label: 'Gemini 3.5 Flash (Vercel AI Gateway)', note: 'Image-capable alternative; requires AI Gateway credits.' },
+  { id: 'openai/gpt-5-mini', label: 'GPT-5 mini (Vercel AI Gateway)', note: 'Image-capable alternative; requires AI Gateway credits.' },
+  { id: 'openai/gpt-4.1-mini', label: 'GPT-4.1 mini (Vercel AI Gateway)', note: 'Image-capable alternative; requires AI Gateway credits.' },
 ]
 
 const OCR_SETTING_KEY = 'ocr'

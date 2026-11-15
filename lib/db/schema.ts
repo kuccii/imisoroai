@@ -169,3 +169,16 @@ export const fiscalSubmission = pgTable('fiscal_submission', {
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const businessTransaction = pgTable('business_transaction', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  type: text('type').notNull(),
+  counterparty: text('counterparty').notNull(),
+  reference: text('reference'),
+  amount: integer('amount').notNull(),
+  transactionDate: text('transactionDate').notNull(),
+  status: text('status').notNull().default('unmatched'),
+  source: text('source').notNull().default('manual'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
