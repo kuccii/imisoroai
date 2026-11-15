@@ -81,9 +81,12 @@ export function matchPurchases(purchases: PurchaseRow[], payments: PaymentRow[],
     if (usedPurchases.has(pair.purchase.id) || usedPayments.has(pair.payment.id)) continue
     const ambiguous = (byPurchase.get(pair.purchase.id) ?? 0) > 1 || (byPayment.get(pair.payment.id) ?? 0) > 1
     if (ambiguous) {
-      usedPurchases.add(pair.purchase.id)
-      usedPayments.add(pair.payment.id)
-      results.push({ group: 'needs_review', purchaseIds: [pair.purchase.id], paymentIds: [pair.payment.id], reason: 'Multiple deterministic candidates; confirm the supplier/payment mapping before matching.', confidence: 0.45, amountDifference: pair.diff })
+      const related = pairings.filter(candidate => candidate.purchase.id === pair.purchase.id || candidate.payment.id === pair.payment.id)
+      const purchaseIds = [...new Set(related.map(candidate => candidate.purchase.id))]
+      const paymentIds = [...new Set(related.map(candidate => candidate.payment.id))]
+      purchaseIds.forEach(id => usedPurchases.add(id))
+      paymentIds.forEach(id => usedPayments.add(id))
+      results.push({ group: 'needs_review', purchaseIds, paymentIds, reason: 'Multiple deterministic candidates; confirm the supplier/payment mapping before matching.', confidence: 0.45, amountDifference: pair.diff })
       continue
     }
     usedPurchases.add(pair.purchase.id)

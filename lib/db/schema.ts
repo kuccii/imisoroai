@@ -90,6 +90,7 @@ export const invoiceRecord = pgTable('invoice_record', {
 export const complianceTask = pgTable('compliance_task', {
   id: text('id').primaryKey(),
   userId: text('userId').notNull(),
+  clientId: text('clientId'),
   title: text('title').notNull(),
   description: text('description').notNull(),
   dueDate: text('dueDate').notNull(),
@@ -102,6 +103,7 @@ export const complianceTask = pgTable('compliance_task', {
 export const auditEvent = pgTable('audit_event', {
   id: text('id').primaryKey(),
   userId: text('userId').notNull(),
+  clientId: text('clientId'),
   action: text('action').notNull(),
   entityType: text('entityType').notNull(),
   entityId: text('entityId'),
@@ -186,6 +188,7 @@ export const businessTransaction = pgTable('business_transaction', {
 export const importedEvidence = pgTable('imported_evidence', {
   id: text('id').primaryKey(),
   userId: text('userId').notNull(),
+  clientId: text('clientId'),
   kind: text('kind').notNull(),
   supplier: text('supplier').notNull(),
   tin: text('tin').notNull().default(''),
@@ -206,6 +209,7 @@ export const importedEvidence = pgTable('imported_evidence', {
 export const supplierMapping = pgTable('supplier_mapping', {
   id: text('id').primaryKey(),
   userId: text('userId').notNull(),
+  clientId: text('clientId').notNull(),
   normalizedName: text('normalizedName').notNull(),
   canonicalName: text('canonicalName').notNull(),
   supplierTin: text('supplierTin').notNull().default(''),
@@ -213,4 +217,55 @@ export const supplierMapping = pgTable('supplier_mapping', {
   confirmed: boolean('confirmed').notNull().default(false),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const workspaceClient = pgTable('workspace_client', {
+  id: text('id').primaryKey(),
+  ownerUserId: text('ownerUserId').notNull(),
+  displayName: text('displayName').notNull(),
+  tin: text('tin').notNull().default(''),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const clientMembership = pgTable('client_membership', {
+  id: text('id').primaryKey(),
+  clientId: text('clientId').notNull(),
+  userId: text('userId').notNull(),
+  role: text('role').notNull().default('accountant'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const clientConsent = pgTable('client_consent', {
+  id: text('id').primaryKey(),
+  clientId: text('clientId').notNull(),
+  recordedByUserId: text('recordedByUserId').notNull(),
+  consentText: text('consentText').notNull(),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const reminderPreference = pgTable('reminder_preference', {
+  id: text('id').primaryKey(),
+  clientId: text('clientId').notNull(),
+  userId: text('userId').notNull(),
+  channel: text('channel').notNull(),
+  optIn: boolean('optIn').notNull().default(false),
+  destination: text('destination'),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const ledgerDraftEntry = pgTable('ledger_draft_entry', {
+  id: text('id').primaryKey(),
+  clientId: text('clientId').notNull(),
+  createdByUserId: text('createdByUserId').notNull(),
+  sourceRecordId: text('sourceRecordId'),
+  expenseDate: text('expenseDate').notNull(),
+  supplier: text('supplier').notNull(),
+  tin: text('tin').notNull().default(''),
+  reference: text('reference').notNull().default(''),
+  amountRwf: integer('amountRwf').notNull(),
+  reason: text('reason').notNull(),
+  evidenceDescription: text('evidenceDescription').notNull(),
+  reviewStatus: text('reviewStatus').notNull().default('needs_review'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
 })

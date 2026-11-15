@@ -91,6 +91,7 @@ const statements = [
   `CREATE TABLE IF NOT EXISTS "compliance_task" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL,
+    "clientId" text,
     "title" text NOT NULL,
     "description" text NOT NULL,
     "dueDate" text NOT NULL,
@@ -102,12 +103,17 @@ const statements = [
   `CREATE TABLE IF NOT EXISTS "audit_event" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL,
+    "clientId" text,
     "action" text NOT NULL,
     "entityType" text NOT NULL,
     "entityId" text,
     "metadata" text,
     "createdAt" timestamptz NOT NULL DEFAULT now()
   )`,
+  `ALTER TABLE "audit_event" ADD COLUMN IF NOT EXISTS "clientId" text`,
+  `ALTER TABLE "compliance_task" ADD COLUMN IF NOT EXISTS "clientId" text`,
+  `ALTER TABLE "imported_evidence" ADD COLUMN IF NOT EXISTS "clientId" text`,
+  `ALTER TABLE "supplier_mapping" ADD COLUMN IF NOT EXISTS "clientId" text NOT NULL DEFAULT ''`,
   `CREATE TABLE IF NOT EXISTS "ledger_account" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL,
@@ -143,6 +149,7 @@ const statements = [
   `CREATE TABLE IF NOT EXISTS "imported_evidence" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL,
+    "clientId" text,
     "kind" text NOT NULL,
     "supplier" text NOT NULL,
     "tin" text NOT NULL DEFAULT '',
@@ -162,6 +169,7 @@ const statements = [
   `CREATE TABLE IF NOT EXISTS "supplier_mapping" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL,
+    "clientId" text NOT NULL DEFAULT '',
     "normalizedName" text NOT NULL,
     "canonicalName" text NOT NULL,
     "supplierTin" text NOT NULL DEFAULT '',
@@ -172,6 +180,58 @@ const statements = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "supplier_mapping_user_name_unique" ON "supplier_mapping" ("userId", "normalizedName")`,
   `CREATE INDEX IF NOT EXISTS "imported_evidence_user_kind_date_idx" ON "imported_evidence" ("userId", "kind", "recordDate")`,
+  `CREATE INDEX IF NOT EXISTS "imported_evidence_client_kind_date_idx" ON "imported_evidence" ("clientId", "kind", "recordDate")`,
+  `CREATE TABLE IF NOT EXISTS "workspace_client" (
+    "id" text PRIMARY KEY,
+    "ownerUserId" text NOT NULL,
+    "displayName" text NOT NULL,
+    "tin" text NOT NULL DEFAULT '',
+    "createdAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE TABLE IF NOT EXISTS "client_membership" (
+    "id" text PRIMARY KEY,
+    "clientId" text NOT NULL,
+    "userId" text NOT NULL,
+    "role" text NOT NULL DEFAULT 'accountant',
+    "createdAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "client_membership_client_user_unique" ON "client_membership" ("clientId", "userId")`,
+  `CREATE INDEX IF NOT EXISTS "client_membership_user_idx" ON "client_membership" ("userId", "clientId")`,
+  `CREATE TABLE IF NOT EXISTS "client_consent" (
+    "id" text PRIMARY KEY,
+    "clientId" text NOT NULL,
+    "recordedByUserId" text NOT NULL,
+    "consentText" text NOT NULL,
+    "status" text NOT NULL DEFAULT 'active',
+    "createdAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "client_consent_client_created_idx" ON "client_consent" ("clientId", "createdAt")`,
+  `CREATE TABLE IF NOT EXISTS "reminder_preference" (
+    "id" text PRIMARY KEY,
+    "clientId" text NOT NULL,
+    "userId" text NOT NULL,
+    "channel" text NOT NULL,
+    "optIn" boolean NOT NULL DEFAULT false,
+    "destination" text,
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "reminder_preference_client_user_channel_unique" ON "reminder_preference" ("clientId", "userId", "channel")`,
+  `CREATE TABLE IF NOT EXISTS "ledger_draft_entry" (
+    "id" text PRIMARY KEY,
+    "clientId" text NOT NULL,
+    "createdByUserId" text NOT NULL,
+    "sourceRecordId" text,
+    "expenseDate" text NOT NULL,
+    "supplier" text NOT NULL,
+    "tin" text NOT NULL DEFAULT '',
+    "reference" text NOT NULL DEFAULT '',
+    "amountRwf" integer NOT NULL,
+    "reason" text NOT NULL,
+    "evidenceDescription" text NOT NULL,
+    "reviewStatus" text NOT NULL DEFAULT 'needs_review',
+    "createdAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "ledger_draft_client_created_idx" ON "ledger_draft_entry" ("clientId", "createdAt")`,
   `CREATE TABLE IF NOT EXISTS "business_fiscal_profile" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL UNIQUE,

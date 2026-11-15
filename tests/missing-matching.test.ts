@@ -14,6 +14,16 @@ test('does not guess between ambiguous supplier names; asks for human review', (
   assert.equal(result[1].group, 'in_rra_not_in_books')
 })
 
+test('surfaces multiple amount candidates as one needs-review group', () => {
+  const result = matchPurchases(
+    [purchase('rra-a', 'Alpha Trading', 100_000), purchase('rra-b', 'Alpha Trading', 100_050)],
+    [payment('bank-1', 'Alpha Trading', 100_000)],
+  )
+  assert.equal(result.length, 1)
+  assert.equal(result[0].group, 'needs_review')
+  assert.deepEqual(result[0].purchaseIds.sort(), ['rra-a', 'rra-b'])
+})
+
 test('confirmed supplier mapping enables deterministic split-payment match', () => {
   const result = matchPurchases(
     [purchase('rra-1', 'Alpha Trading Ltd', 120_000)],
