@@ -1,2 +1,5 @@
-import ImisoroApp from '@/components/imisoro-app'
-export default function VatSummaryPage() { return <ImisoroApp initialView="VAT summary" /> }
+import WorkspaceRoute from '@/components/workspace-route'
+
+export default function VatSummaryPage() {
+  return <WorkspaceRoute initialView="VAT summary" />
+}

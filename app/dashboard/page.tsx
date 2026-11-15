@@ -1,9 +1,18 @@
-import ImisoroApp from '@/components/imisoro-app'
-import { getWorkspaceData } from '@/lib/data'
-import { redirect } from 'next/navigation'
+import WorkspaceRoute from '@/components/workspace-route'
+import type { View } from '@/components/imisoro-app'
 
-export default async function DashboardPage() {
-  const workspace = await getWorkspaceData()
-  if (!workspace) redirect('/login')
-  return <ImisoroApp initialView="Overview" initialSession={workspace.session} initialInvoices={workspace.invoices} initialLanguage={workspace.profile?.language === 'rw' || workspace.profile?.language === 'fr' ? workspace.profile.language : 'en'} />
+const dashboardViews: Record<string, View> = {
+  'filing-preparation': 'Filing preparation',
+  fiscalization: 'Fiscalization',
+  sales: 'Sales',
+  reconciliation: 'Reconciliation',
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>
+}) {
+  const { view } = await searchParams
+  return <WorkspaceRoute initialView={dashboardViews[view ?? ''] ?? 'Overview'} />
 }

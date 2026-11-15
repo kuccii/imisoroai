@@ -1,4 +1,5 @@
 import { auth } from '@/lib/auth'
+import { fiscalDraftsEnabled } from '@/lib/feature-flags'
 import { db } from '@/lib/db'
 import { auditEvent, businessFiscalProfile } from '@/lib/db/schema'
 import { rraAvailability } from '@/lib/rra/availability'
@@ -21,6 +22,7 @@ async function getUserId() {
 }
 
 export async function GET() {
+  if (!fiscalDraftsEnabled) return NextResponse.json({ error: 'This feature is unavailable.' }, { status: 404 })
   const userId = await getUserId()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const [config] = await db.select().from(businessFiscalProfile).where(eq(businessFiscalProfile.userId, userId)).limit(1)
@@ -28,6 +30,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  if (!fiscalDraftsEnabled) return NextResponse.json({ error: 'This feature is unavailable.' }, { status: 404 })
   const userId = await getUserId()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = setupSchema.safeParse(await request.json())

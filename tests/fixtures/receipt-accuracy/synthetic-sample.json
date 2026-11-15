@@ -1,0 +1,24 @@
+{
+  "receiptFile": "synthetic-sample.svg",
+  "synthetic": true,
+  "groundTruth": {
+    "supplier": "Sample Office Ltd",
+    "tin": "SYNTHETIC-ONLY",
+    "invoiceDate": "2026-10-15",
+    "invoiceNumber": "SAMPLE-001",
+    "amount": 12000,
+    "vat": 0,
+    "currency": "RWF",
+    "evidence": "unclear"
+  },
+  "prediction": {
+    "supplier": "Sample Office Ltd",
+    "tin": "SYNTHETIC-ONLY",
+    "invoiceDate": "2026-10-15",
+    "invoiceNumber": "SAMPLE-001",
+    "amount": 12000,
+    "vat": 0,
+    "currency": "RWF",
+    "evidence": "unclear"
+  }
+}

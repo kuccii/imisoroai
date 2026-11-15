@@ -1,4 +1,5 @@
 import { auth } from '@/lib/auth'
+import { fiscalDraftsEnabled } from '@/lib/feature-flags'
 import { db } from '@/lib/db'
 import { fiscalSale } from '@/lib/db/schema'
 import { rraAvailability } from '@/lib/rra/availability'
@@ -7,6 +8,7 @@ import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!fiscalDraftsEnabled) return NextResponse.json({ error: 'This feature is unavailable.' }, { status: 404 })
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

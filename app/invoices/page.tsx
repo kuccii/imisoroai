@@ -1,2 +1,5 @@
-import ImisoroApp from '@/components/imisoro-app'
-export default function InvoicesPage() { return <ImisoroApp initialView="Invoices" /> }
+import WorkspaceRoute from '@/components/workspace-route'
+
+export default function InvoicesPage() {
+  return <WorkspaceRoute initialView="Invoices" />
+}

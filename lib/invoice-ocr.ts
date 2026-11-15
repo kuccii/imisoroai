@@ -1,5 +1,4 @@
-import { google } from '@ai-sdk/google'
-import { generateText, Output } from 'ai'
+import { generateText, gateway, Output } from 'ai'
 import { z } from 'zod'
 
 export const invoiceExtractionSchema = z.object({
@@ -19,39 +18,19 @@ export type InvoiceExtraction = z.infer<typeof invoiceExtractionSchema>
 export type InvoiceOcrIssue = 'credits_required' | 'billing_required' | 'unavailable'
 export type InvoiceMediaType = 'application/pdf' | 'image/jpeg' | 'image/png'
 
-// Used when the request goes through the Vercel AI Gateway.
 export const DEFAULT_OCR_MODEL = 'openai/gpt-5.4-mini'
-// Used when a direct Google AI Studio key is configured.
-// Flash-lite answers in a few seconds; the larger flashes can take minutes on
-// scanned documents, which would exceed the upload route's time limit.
-export const DEFAULT_GOOGLE_OCR_MODEL = 'google/gemini-3.1-flash-lite'
 
-export function googleOcrAvailable() {
-  return Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY)
-}
-
-/**
- * The model a workspace scans with when no administrator has chosen one.
- * A direct Google key is preferred because it does not depend on Gateway
- * credits, which is why uploaded invoices used to stay empty.
- */
 export function defaultOcrModel() {
-  return googleOcrAvailable() ? DEFAULT_GOOGLE_OCR_MODEL : DEFAULT_OCR_MODEL
+  return DEFAULT_OCR_MODEL
 }
 
 type TextModel = Parameters<typeof generateText>[0]['model']
 
 function resolveModel(model: string): TextModel {
-  const prefix = 'google/'
-  // The Google provider ships its own copy of the provider spec types, so the
-  // model is adapted here once instead of casting at every call site.
-  if (model.startsWith(prefix) && googleOcrAvailable()) {
-    return google(model.slice(prefix.length)) as unknown as TextModel
-  }
-  return model as TextModel
+  return gateway(model)
 }
 
-export async function extractInvoiceDocument(bytes: Uint8Array, mediaType: InvoiceMediaType, model: string = defaultOcrModel()): Promise<InvoiceExtraction> {
+export async function extractInvoiceDocument(bytes: Uint8Array, mediaType: InvoiceMediaType, model: string = defaultOcrModel()): Promise<{ extraction: InvoiceExtraction; generationId: string | null }> {
   const result = await generateText({
     model: resolveModel(model),
     output: Output.object({ schema: invoiceExtractionSchema }),
@@ -65,7 +44,32 @@ export async function extractInvoiceDocument(bytes: Uint8Array, mediaType: Invoi
     }],
   })
 
-  return result.output
+  const gatewayMetadata = result.providerMetadata?.gateway
+  const generationId = gatewayMetadata && typeof gatewayMetadata === 'object' && 'generationId' in gatewayMetadata && typeof gatewayMetadata.generationId === 'string'
+    ? gatewayMetadata.generationId
+    : null
+
+  return { extraction: result.output, generationId }
+}
+
+export function getInvoiceGenerationIdFromError(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null
+  const generationId = (error as { generationId?: unknown }).generationId
+  return typeof generationId === 'string' ? generationId : null
+}
+
+export async function getInvoiceGenerationCostUsd(generationId: string): Promise<number | null> {
+  for (const delayMs of [0, 350, 700]) {
+    if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs))
+    try {
+      const generation = await gateway.getGenerationInfo({ id: generationId })
+      return Number.isFinite(generation.totalCost) ? generation.totalCost : null
+    } catch (error) {
+      const statusCode = error && typeof error === 'object' ? (error as { statusCode?: unknown }).statusCode : undefined
+      if (statusCode !== 404) return null
+    }
+  }
+  return null
 }
 
 export function classifyInvoiceOcrIssue(error: unknown): InvoiceOcrIssue {
