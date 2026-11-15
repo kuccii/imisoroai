@@ -140,6 +140,38 @@ const statements = [
     "source" text NOT NULL DEFAULT 'manual',
     "createdAt" timestamptz NOT NULL DEFAULT now()
   )`,
+  `CREATE TABLE IF NOT EXISTS "imported_evidence" (
+    "id" text PRIMARY KEY,
+    "userId" text NOT NULL,
+    "kind" text NOT NULL,
+    "supplier" text NOT NULL,
+    "tin" text NOT NULL DEFAULT '',
+    "reference" text NOT NULL DEFAULT '',
+    "recordDate" text NOT NULL,
+    "amount" integer NOT NULL,
+    "vat" integer,
+    "currency" text NOT NULL DEFAULT 'RWF',
+    "phone" text,
+    "userTag" text,
+    "chaseStatus" text NOT NULL DEFAULT 'not_chased',
+    "confirmed" boolean NOT NULL DEFAULT false,
+    "importBatchId" text NOT NULL,
+    "rawData" text NOT NULL DEFAULT '{}',
+    "createdAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE TABLE IF NOT EXISTS "supplier_mapping" (
+    "id" text PRIMARY KEY,
+    "userId" text NOT NULL,
+    "normalizedName" text NOT NULL,
+    "canonicalName" text NOT NULL,
+    "supplierTin" text NOT NULL DEFAULT '',
+    "phone" text,
+    "confirmed" boolean NOT NULL DEFAULT false,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "supplier_mapping_user_name_unique" ON "supplier_mapping" ("userId", "normalizedName")`,
+  `CREATE INDEX IF NOT EXISTS "imported_evidence_user_kind_date_idx" ON "imported_evidence" ("userId", "kind", "recordDate")`,
   `CREATE TABLE IF NOT EXISTS "business_fiscal_profile" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL UNIQUE,

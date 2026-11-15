@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
-import ImisoroApp, { type View } from '@/components/imisoro-app'
+import type { View } from '@/components/imisoro-app'
+import { MissingFirstWorkspace } from '@/components/missing-first-workspace'
 import { getWorkspaceData } from '@/lib/data'
 
 export default async function WorkspaceRoute({
@@ -21,12 +22,9 @@ export default async function WorkspaceRoute({
     : 'en'
 
   return (
-    <ImisoroApp
+    <MissingFirstWorkspace
       key={`${initialView}:${initialInvoiceId ?? ''}`}
-      initialView={initialView}
-      initialInvoiceId={initialInvoiceId}
-      initialSession={workspace.session}
-      initialInvoices={workspace.invoices}
+      userName={workspace.session.user.name || workspace.session.user.email?.split('@')[0] || 'there'}
       initialLanguage={language}
     />
   )

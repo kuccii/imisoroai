@@ -182,3 +182,35 @@ export const businessTransaction = pgTable('business_transaction', {
   source: text('source').notNull().default('manual'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const importedEvidence = pgTable('imported_evidence', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  kind: text('kind').notNull(),
+  supplier: text('supplier').notNull(),
+  tin: text('tin').notNull().default(''),
+  reference: text('reference').notNull().default(''),
+  recordDate: text('recordDate').notNull(),
+  amount: integer('amount').notNull(),
+  vat: integer('vat'),
+  currency: text('currency').notNull().default('RWF'),
+  phone: text('phone'),
+  userTag: text('userTag'),
+  chaseStatus: text('chaseStatus').notNull().default('not_chased'),
+  confirmed: boolean('confirmed').notNull().default(false),
+  importBatchId: text('importBatchId').notNull(),
+  rawData: text('rawData').notNull().default('{}'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const supplierMapping = pgTable('supplier_mapping', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull(),
+  normalizedName: text('normalizedName').notNull(),
+  canonicalName: text('canonicalName').notNull(),
+  supplierTin: text('supplierTin').notNull().default(''),
+  phone: text('phone'),
+  confirmed: boolean('confirmed').notNull().default(false),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+})
