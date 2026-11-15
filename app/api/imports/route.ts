@@ -21,10 +21,10 @@ const recordMappingSchema = z.object({
   phone: z.number().int().nonnegative().optional(),
 })
 const patchSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('confirm_supplier'), clientId: z.string().min(1), supplier: z.string().trim().min(2).max(160), alias: z.string().trim().min(2).max(160), tin: z.string().trim().max(32).optional(), phone: z.string().trim().max(40).optional() }),
-  z.object({ action: z.literal('tag_possible'), clientId: z.string().min(1), recordId: z.string().min(1), enabled: z.boolean() }),
-  z.object({ action: z.literal('chase_status'), clientId: z.string().min(1), recordId: z.string().min(1), status: z.enum(['not_chased', 'chased', 'complied', 'no_response']) }),
-  z.object({ action: z.literal('confirm_match'), clientId: z.string().min(1), recordIds: z.array(z.string().min(1)).min(1).max(10) }),
+  z.object({ action: z.literal('confirm_supplier'), clientId: z.string().min(1), demoOnly: z.boolean().default(false), supplier: z.string().trim().min(2).max(160), alias: z.string().trim().min(2).max(160), tin: z.string().trim().max(32).optional(), phone: z.string().trim().max(40).optional() }),
+  z.object({ action: z.literal('tag_possible'), clientId: z.string().min(1), demoOnly: z.boolean().default(false), recordId: z.string().min(1), enabled: z.boolean() }),
+  z.object({ action: z.literal('chase_status'), clientId: z.string().min(1), demoOnly: z.boolean().default(false), recordId: z.string().min(1), status: z.enum(['not_chased', 'chased', 'complied', 'no_response']) }),
+  z.object({ action: z.literal('confirm_match'), clientId: z.string().min(1), demoOnly: z.boolean().default(false), recordIds: z.array(z.string().min(1)).min(1).max(10) }),
 ])
 
 async function currentUser() {
@@ -59,14 +59,41 @@ export async function GET(request: Request) {
   const user = await currentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   await ensureDatabaseSchema()
-  const requestedClientId = new URL(request.url).searchParams.get('clientId')
+  const searchParams = new URL(request.url).searchParams
+  const requestedClientId = searchParams.get('clientId')
+  const demoOnly = searchParams.get('demo') === 'true'
+  const view = searchParams.get('view')
   const client = await getClientContext(user, requestedClientId)
   if (!client) return NextResponse.json({ error: 'Client not found or access not granted.' }, { status: 404 })
   if (!client.consentActive) return NextResponse.json({ records: [], mappings: [], matches: [], metrics: { unsupportedRwf: 0, chasedRwf: 0, recoveredRwf: 0, inputVatRwf: 0 }, needsConsent: true, activeClientId: client.id })
   const [records, mappings] = await Promise.all([
-    db.select().from(importedEvidence).where(eq(importedEvidence.clientId, client.id)).orderBy(desc(importedEvidence.createdAt)).limit(2000),
+    db.select().from(importedEvidence).where(and(eq(importedEvidence.clientId, client.id), eq(importedEvidence.isDemo, demoOnly))).orderBy(desc(importedEvidence.createdAt)).limit(2000),
     db.select().from(supplierMapping).where(eq(supplierMapping.clientId, client.id)),
   ])
+  if (view === 'Missing') {
+    const batches = [...new Map(records.map(record => [record.importBatchId, record.createdAt])).entries()]
+    const batchIds = batches.map(([batchId]) => batchId)
+    if (batchIds.length) {
+      const viewed = await db.select({ entityId: auditEvent.entityId }).from(auditEvent).where(and(
+        eq(auditEvent.userId, user.id),
+        eq(auditEvent.clientId, client.id),
+        eq(auditEvent.action, 'import_to_missing_viewed'),
+        inArray(auditEvent.entityId, batchIds),
+      ))
+      const alreadyViewed = new Set(viewed.map(event => event.entityId))
+      const now = new Date()
+      const events = batches.filter(([batchId]) => !alreadyViewed.has(batchId)).map(([batchId, importedAt]) => ({
+        id: `AUD-${crypto.randomUUID()}`,
+        userId: user.id,
+        clientId: client.id,
+        action: 'import_to_missing_viewed',
+        entityType: 'import_batch',
+        entityId: batchId,
+        metadata: JSON.stringify({ elapsedMs: Math.max(0, now.getTime() - importedAt.getTime()), demoOnly }),
+      }))
+      if (events.length) await db.insert(auditEvent).values(events)
+    }
+  }
   const rra = records.filter(record => record.kind === 'rra_purchases')
   const paymentRecords = records.filter(record => record.kind === 'payments')
   const matches = matchPurchases(
@@ -79,7 +106,7 @@ export async function GET(request: Request) {
   const recoveredIds = new Set(enrichedMatches.filter(match => match.group === 'supported' && match.confirmed).flatMap(match => match.paymentIds))
   const unsupported = matches.filter(match => match.group === 'missing_at_rra').reduce((sum, match) => sum + match.paymentIds.reduce((partial, id) => partial + (paymentRecords.find(row => row.id === id)?.amount ?? 0), 0), 0)
   const inputVatRwf = enrichedMatches.filter(match => match.group === 'supported' && match.confirmed).reduce((sum, match) => sum + match.purchaseIds.reduce((partial, id) => partial + (rra.find(row => row.id === id)?.vat ?? 0), 0), 0)
-  return NextResponse.json({ records, mappings: mappings.map(row => ({ ...row, normalizedName: row.normalizedName.startsWith(`${client.id}::`) ? row.normalizedName.slice(client.id.length + 2) : row.normalizedName })), matches: enrichedMatches, needsConsent: false, activeClientId: client.id, metrics: { unsupportedRwf: unsupported, chasedRwf: chased, recoveredRwf: [...recoveredIds].reduce((sum, id) => sum + (paymentRecords.find(row => row.id === id)?.amount ?? 0), 0), inputVatRwf } })
+  return NextResponse.json({ records, mappings: mappings.map(row => ({ ...row, normalizedName: row.normalizedName.startsWith(`${client.id}::`) ? row.normalizedName.slice(client.id.length + 2) : row.normalizedName })), matches: enrichedMatches, needsConsent: false, activeClientId: client.id, demoMode: demoOnly, metrics: { unsupportedRwf: unsupported, chasedRwf: chased, recoveredRwf: [...recoveredIds].reduce((sum, id) => sum + (paymentRecords.find(row => row.id === id)?.amount ?? 0), 0), inputVatRwf } })
 }
 
 export async function POST(request: Request) {
@@ -90,6 +117,7 @@ export async function POST(request: Request) {
   try { form = await request.formData() } catch { return NextResponse.json({ error: 'Provide an import file or pasted table.' }, { status: 400 }) }
   const kind = form.get('kind')
   if (kind !== 'rra_purchases' && kind !== 'payments') return NextResponse.json({ error: 'Choose a purchase list or payment statement.' }, { status: 400 })
+  const demoOnly = form.get('demoOnly') === 'true'
   const client = await getClientContext(user, String(form.get('clientId') ?? ''))
   if (!client) return NextResponse.json({ error: 'Client not found or access not granted.' }, { status: 404 })
   if (!client.consentActive) return NextResponse.json({ error: 'Record client consent before importing data.' }, { status: 409 })
@@ -131,7 +159,7 @@ export async function POST(request: Request) {
       return
     }
     entries.push({
-      id: `IMP-${crypto.randomUUID()}`, userId: user.id, clientId: client.id, kind, supplier,
+      id: `IMP-${crypto.randomUUID()}`, userId: user.id, clientId: client.id, isDemo: demoOnly, kind, supplier,
       tin: mapping.tin === undefined ? '' : (row[mapping.tin] ?? '').trim().slice(0, 32),
       reference: mapping.receiptNumber === undefined ? '' : (row[mapping.receiptNumber] ?? '').trim().slice(0, 120),
       recordDate: date, amount, vat, currency: 'RWF', phone: mapping.phone === undefined ? null : (row[mapping.phone] ?? '').trim().slice(0, 40) || null,
@@ -168,17 +196,17 @@ export async function PATCH(request: Request) {
     await db.insert(supplierMapping).values({ id: `SUP-${crypto.randomUUID()}`, userId: user.id, clientId: client.id, normalizedName: storedAlias, ...values }).onConflictDoUpdate({ target: [supplierMapping.userId, supplierMapping.normalizedName], set: values })
     entityId = alias
   } else if (data.action === 'tag_possible') {
-    const [record] = await db.update(importedEvidence).set({ userTag: data.enabled ? 'likely_no_ebm_possible' : null }).where(and(eq(importedEvidence.id, data.recordId), eq(importedEvidence.clientId, client.id), eq(importedEvidence.kind, 'payments'))).returning({ id: importedEvidence.id })
+    const [record] = await db.update(importedEvidence).set({ userTag: data.enabled ? 'likely_no_ebm_possible' : null }).where(and(eq(importedEvidence.id, data.recordId), eq(importedEvidence.clientId, client.id), eq(importedEvidence.kind, 'payments'), eq(importedEvidence.isDemo, data.demoOnly))).returning({ id: importedEvidence.id })
     if (!record) return NextResponse.json({ error: 'Payment record not found.' }, { status: 404 })
     entityId = record.id
   } else if (data.action === 'chase_status') {
-    const [record] = await db.update(importedEvidence).set({ chaseStatus: data.status }).where(and(eq(importedEvidence.id, data.recordId), eq(importedEvidence.clientId, client.id), eq(importedEvidence.kind, 'payments'))).returning({ id: importedEvidence.id })
+    const [record] = await db.update(importedEvidence).set({ chaseStatus: data.status }).where(and(eq(importedEvidence.id, data.recordId), eq(importedEvidence.clientId, client.id), eq(importedEvidence.kind, 'payments'), eq(importedEvidence.isDemo, data.demoOnly))).returning({ id: importedEvidence.id })
     if (!record) return NextResponse.json({ error: 'Payment record not found.' }, { status: 404 })
     entityId = record.id
   } else {
-    const records = await db.select({ id: importedEvidence.id }).from(importedEvidence).where(and(eq(importedEvidence.clientId, client.id), inArray(importedEvidence.id, data.recordIds)))
+    const records = await db.select({ id: importedEvidence.id }).from(importedEvidence).where(and(eq(importedEvidence.clientId, client.id), eq(importedEvidence.isDemo, data.demoOnly), inArray(importedEvidence.id, data.recordIds)))
     if (records.length !== data.recordIds.length) return NextResponse.json({ error: 'One or more records were not found.' }, { status: 404 })
-    await db.update(importedEvidence).set({ confirmed: true }).where(and(eq(importedEvidence.clientId, client.id), inArray(importedEvidence.id, data.recordIds)))
+    await db.update(importedEvidence).set({ confirmed: true }).where(and(eq(importedEvidence.clientId, client.id), eq(importedEvidence.isDemo, data.demoOnly), inArray(importedEvidence.id, data.recordIds)))
     entityId = data.recordIds.join(',')
   }
   await db.insert(auditEvent).values({ id: `AUD-${crypto.randomUUID()}`, userId: user.id, clientId: client.id, action: `missing_workflow_${actionName}`, entityType: actionName === 'confirm_supplier' ? 'supplier_mapping' : 'imported_evidence', entityId, metadata: JSON.stringify({ action: actionName }) })

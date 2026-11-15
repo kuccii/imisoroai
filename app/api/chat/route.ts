@@ -2,6 +2,7 @@
 import { convertToModelMessages, gateway, streamText, type UIMessage } from 'ai'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
+import { aiChatEnabled } from '@/lib/feature-flags'
 
 export const maxDuration = 30
 
@@ -26,6 +27,7 @@ function textOf(message: UIMessage): string {
 }
 
 export async function POST(request: Request) {
+  if (!aiChatEnabled) return Response.json({ error: 'This feature is unavailable.' }, { status: 404 })
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 

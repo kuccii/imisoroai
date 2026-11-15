@@ -189,6 +189,7 @@ export const importedEvidence = pgTable('imported_evidence', {
   id: text('id').primaryKey(),
   userId: text('userId').notNull(),
   clientId: text('clientId'),
+  isDemo: boolean('isDemo').notNull().default(false),
   kind: text('kind').notNull(),
   supplier: text('supplier').notNull(),
   tin: text('tin').notNull().default(''),

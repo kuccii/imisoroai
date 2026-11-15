@@ -1,4 +1,5 @@
 import { auth } from '@/lib/auth'
+import { fiscalDraftsEnabled } from '@/lib/feature-flags'
 import { db } from '@/lib/db'
 import { auditEvent, businessTransaction } from '@/lib/db/schema'
 import { and, desc, eq } from 'drizzle-orm'
@@ -20,6 +21,7 @@ async function getUserId() {
 }
 
 export async function GET() {
+  if (!fiscalDraftsEnabled) return NextResponse.json({ error: 'This feature is unavailable.' }, { status: 404 })
   const userId = await getUserId()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -34,6 +36,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!fiscalDraftsEnabled) return NextResponse.json({ error: 'This feature is unavailable.' }, { status: 404 })
   const userId = await getUserId()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

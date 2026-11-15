@@ -57,3 +57,28 @@ This document separates verified application behavior from external tax, data, a
 - Statuses are internal only; never label records “RRA-approved” or assert deductibility/tax determination.
 - Preserve existing authentication checks, per-user scoping, validation, and audit events. New accountant/client operations must scope every query and audit actor plus client.
 - Do not destructively alter existing data without explicit user approval.
+
+## Current implementation status (2026-11-15)
+
+| Area | Implemented in this branch | Still unverified or incomplete |
+|---|---|---|
+| Missing-first core | User-supplied CSV/XLSX and pasted imports, column mapping, manual payment entry, deterministic match groups/reasons/confidence, supplier chase actions, and a client switcher. Navigation centers on **Missing**, with Imports, Suppliers, Ledger draft, Exports, Deadlines, and Settings kept as secondary sections. | No direct e-Tax or bank/MoMo connection. PDF statement ingestion is not supported. External export and tax rules remain VERIFY items. |
+| Accountant workflow | Additive client/consent records, accountant membership, client-scoped query paths, ledger drafts and review exports, opt-in provider preference records, and in-app tasks are present. | Legal basis, consent wording, deletion lifecycle, and every provider adapter need review or further implementation. |
+| Safety gates | Fiscalization and sales APIs are unavailable unless `IMISORO_FISCAL_DRAFTS_ENABLED=true`; the active workspace navigation does not expose them. The legacy AI chat endpoint remains unavailable because `aiChatEnabled` is hard-disabled until retrieval and citation enforcement exist. | Do not set the fiscal flag in production. Chat cannot be enabled safely until curated-source retrieval and citation checks are implemented. |
+| Demo | A clearly fictional, client-scoped purchase/payment scenario is seeded and shown in a separate demo view. | It is not RRA or bank data and must not be used as tax evidence. |
+| Evidence quality and operations | Matching tests exist. OCR and imported values remain human-reviewable. | No redacted production receipt corpus or measured OCR accuracy; OCR cost per document and import-to-missing elapsed time are not yet recorded. Data erasure is not implemented. |
+
+## Data inventory, retention, and deletion
+
+This is an engineering inventory, not a legal conclusion. Legal review against applicable Rwandan data-protection requirements is required (VERIFY-06).
+
+| Data | Stored / processed | Current control and gap |
+|---|---|---|
+| Account and session | Better Auth/PostgreSQL: account identifiers, email/name, password hash, sessions, and authentication metadata. | Session lifecycle follows the auth library; a product-wide account deletion and dependent-data erasure workflow is not documented here. |
+| Original invoice files | Private Vercel Blob objects; metadata, extracted fields, and review state in PostgreSQL. When OCR is enabled, document bytes are sent server-side to the configured AI Gateway model. | Application deletion may remove a file through existing invoice actions, but no end-to-end retention schedule or verified provider-retention statement is asserted. |
+| Imported RRA purchase lists and payment statements | Parsed row fields, raw source cells, batch identifiers, client/user ownership, and review/chase state in PostgreSQL. | User-provided data only. No automatic retention limit or client-wide erasure workflow is implemented. Demo rows have a separate `isDemo` marker and query scope. |
+| Client and accountant records | Client identity/TIN, membership role, consent events, and access records in PostgreSQL. | Consent is auditable and revocable. Revocation blocks evidence workflows but does not itself erase historical evidence. |
+| Ledger drafts, reminders, supplier directory, audit events | Operational records in PostgreSQL, scoped to user/client where applicable. | Audit history is retained; retention duration and lawful archival/deletion rules require counsel review. |
+| OCR usage and timing telemetry | Current audit events store operation/model metadata, but no per-document monetary cost or import-to-missing duration is calculated. | Add measured usage/cost telemetry only when the provider exposes a verifiable cost basis; do not invent pricing. |
+
+No fixed retention period is claimed. There is currently no complete, user-facing client-data deletion workflow. Before production use, define retention by data class, a verified Blob/database erasure path, backup expiration, legal holds, audit-log treatment, and a deletion-request process with counsel. Never silently delete data needed for an active workflow.

@@ -112,8 +112,6 @@ const statements = [
   )`,
   `ALTER TABLE "audit_event" ADD COLUMN IF NOT EXISTS "clientId" text`,
   `ALTER TABLE "compliance_task" ADD COLUMN IF NOT EXISTS "clientId" text`,
-  `ALTER TABLE "imported_evidence" ADD COLUMN IF NOT EXISTS "clientId" text`,
-  `ALTER TABLE "supplier_mapping" ADD COLUMN IF NOT EXISTS "clientId" text NOT NULL DEFAULT ''`,
   `CREATE TABLE IF NOT EXISTS "ledger_account" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL,
@@ -150,6 +148,7 @@ const statements = [
     "id" text PRIMARY KEY,
     "userId" text NOT NULL,
     "clientId" text,
+    "isDemo" boolean NOT NULL DEFAULT false,
     "kind" text NOT NULL,
     "supplier" text NOT NULL,
     "tin" text NOT NULL DEFAULT '',
@@ -166,6 +165,8 @@ const statements = [
     "rawData" text NOT NULL DEFAULT '{}',
     "createdAt" timestamptz NOT NULL DEFAULT now()
   )`,
+  `ALTER TABLE "imported_evidence" ADD COLUMN IF NOT EXISTS "clientId" text`,
+  `ALTER TABLE "imported_evidence" ADD COLUMN IF NOT EXISTS "isDemo" boolean NOT NULL DEFAULT false`,
   `CREATE TABLE IF NOT EXISTS "supplier_mapping" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL,
@@ -178,6 +179,7 @@ const statements = [
     "createdAt" timestamptz NOT NULL DEFAULT now(),
     "updatedAt" timestamptz NOT NULL DEFAULT now()
   )`,
+  `ALTER TABLE "supplier_mapping" ADD COLUMN IF NOT EXISTS "clientId" text NOT NULL DEFAULT ''`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "supplier_mapping_user_name_unique" ON "supplier_mapping" ("userId", "normalizedName")`,
   `CREATE INDEX IF NOT EXISTS "imported_evidence_user_kind_date_idx" ON "imported_evidence" ("userId", "kind", "recordDate")`,
   `CREATE INDEX IF NOT EXISTS "imported_evidence_client_kind_date_idx" ON "imported_evidence" ("clientId", "kind", "recordDate")`,
