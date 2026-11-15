@@ -30,7 +30,7 @@ function resolveModel(model: string): TextModel {
   return gateway(model)
 }
 
-export async function extractInvoiceDocument(bytes: Uint8Array, mediaType: InvoiceMediaType, model: string = defaultOcrModel()): Promise<InvoiceExtraction> {
+export async function extractInvoiceDocument(bytes: Uint8Array, mediaType: InvoiceMediaType, model: string = defaultOcrModel()): Promise<{ extraction: InvoiceExtraction; generationId: string | null }> {
   const result = await generateText({
     model: resolveModel(model),
     output: Output.object({ schema: invoiceExtractionSchema }),
@@ -44,7 +44,32 @@ export async function extractInvoiceDocument(bytes: Uint8Array, mediaType: Invoi
     }],
   })
 
-  return result.output
+  const gatewayMetadata = result.providerMetadata?.gateway
+  const generationId = gatewayMetadata && typeof gatewayMetadata === 'object' && 'generationId' in gatewayMetadata && typeof gatewayMetadata.generationId === 'string'
+    ? gatewayMetadata.generationId
+    : null
+
+  return { extraction: result.output, generationId }
+}
+
+export function getInvoiceGenerationIdFromError(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null
+  const generationId = (error as { generationId?: unknown }).generationId
+  return typeof generationId === 'string' ? generationId : null
+}
+
+export async function getInvoiceGenerationCostUsd(generationId: string): Promise<number | null> {
+  for (const delayMs of [0, 350, 700]) {
+    if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs))
+    try {
+      const generation = await gateway.getGenerationInfo({ id: generationId })
+      return Number.isFinite(generation.totalCost) ? generation.totalCost : null
+    } catch (error) {
+      const statusCode = error && typeof error === 'object' ? (error as { statusCode?: unknown }).statusCode : undefined
+      if (statusCode !== 404) return null
+    }
+  }
+  return null
 }
 
 export function classifyInvoiceOcrIssue(error: unknown): InvoiceOcrIssue {

@@ -3,7 +3,7 @@ import { getOcrSettings } from '@/lib/admin'
 import { db } from '@/lib/db'
 import { auditEvent, invoiceRecord } from '@/lib/db/schema'
 import { and, eq } from 'drizzle-orm'
-import { classifyInvoiceOcrIssue, extractInvoiceDocument, type InvoiceExtraction, type InvoiceMediaType } from '@/lib/invoice-ocr'
+import { classifyInvoiceOcrIssue, extractInvoiceDocument, getInvoiceGenerationCostUsd, getInvoiceGenerationIdFromError, type InvoiceExtraction, type InvoiceMediaType } from '@/lib/invoice-ocr'
 import { deleteStoredFile, storeFile } from '@/lib/storage'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
@@ -86,12 +86,19 @@ export async function POST(request: Request) {
     stage = 'extraction'
     const ocrSettings = await getOcrSettings()
     let extraction: InvoiceExtraction | null = null
+    let ocrGenerationId: string | null = null
+    let ocrCostUsd: number | null = null
     let ocrIssue: 'credits_required' | 'billing_required' | 'unavailable' | null = null
     if (ocrSettings.enabled) {
       try {
-        extraction = await extractInvoiceDocument(bytes, file.type as InvoiceMediaType, ocrSettings.model)
+        const result = await extractInvoiceDocument(bytes, file.type as InvoiceMediaType, ocrSettings.model)
+        extraction = result.extraction
+        ocrGenerationId = result.generationId
+        if (ocrGenerationId) ocrCostUsd = await getInvoiceGenerationCostUsd(ocrGenerationId)
       } catch (error) {
         ocrIssue = classifyInvoiceOcrIssue(error)
+        ocrGenerationId = getInvoiceGenerationIdFromError(error)
+        if (ocrGenerationId) ocrCostUsd = await getInvoiceGenerationCostUsd(ocrGenerationId)
         console.error('[invoice-ocr] extraction failed', {
           errorName: error instanceof Error ? error.name : 'UnknownError',
           ocrIssue,
@@ -144,7 +151,7 @@ export async function POST(request: Request) {
         action: extraction ? 'invoice_extraction_completed' : 'invoice_extraction_failed',
         entityType: 'invoice',
         entityId: id,
-        metadata: JSON.stringify({ extraction, extractionFailed, ocrIssue, ocrModel: ocrSettings.model, ocrEnabled: ocrSettings.enabled, sourcePathname: blobPathname, automatedEligibility: false }),
+        metadata: JSON.stringify({ extraction, extractionFailed, ocrIssue, ocrModel: ocrSettings.model, ocrEnabled: ocrSettings.enabled, ocrGenerationId, ocrCostUsd, ocrCostStatus: !ocrSettings.enabled ? 'not_applicable' : !ocrGenerationId ? 'generation_id_unavailable' : ocrCostUsd === null ? 'cost_unavailable' : 'measured', sourcePathname: blobPathname, automatedEligibility: false }),
       })
       return [updated]
     })

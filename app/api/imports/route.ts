@@ -71,7 +71,12 @@ export async function GET(request: Request) {
     db.select().from(supplierMapping).where(eq(supplierMapping.clientId, client.id)),
   ])
   if (view === 'Missing') {
-    const batches = [...new Map(records.map(record => [record.importBatchId, record.createdAt])).entries()]
+    const batchTimes = new Map<string, Date>()
+    for (const record of records) {
+      const importedAt = batchTimes.get(record.importBatchId)
+      if (!importedAt || record.createdAt < importedAt) batchTimes.set(record.importBatchId, record.createdAt)
+    }
+    const batches = [...batchTimes.entries()]
     const batchIds = batches.map(([batchId]) => batchId)
     if (batchIds.length) {
       const viewed = await db.select({ entityId: auditEvent.entityId }).from(auditEvent).where(and(

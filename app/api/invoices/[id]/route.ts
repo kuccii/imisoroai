@@ -2,7 +2,7 @@ import { auth } from '@/lib/auth'
 import { getOcrSettings } from '@/lib/admin'
 import { db } from '@/lib/db'
 import { auditEvent, invoiceRecord } from '@/lib/db/schema'
-import { classifyInvoiceOcrIssue, extractInvoiceDocument, type InvoiceMediaType } from '@/lib/invoice-ocr'
+import { classifyInvoiceOcrIssue, extractInvoiceDocument, getInvoiceGenerationCostUsd, getInvoiceGenerationIdFromError, type InvoiceMediaType } from '@/lib/invoice-ocr'
 import { readStoredFile } from '@/lib/storage'
 import { and, eq, lt, ne, or } from 'drizzle-orm'
 import { headers } from 'next/headers'
@@ -123,13 +123,18 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   )).returning()
   if (!claimed) return NextResponse.json({ error: 'This invoice is already being scanned or has already been extracted.' }, { status: 409 })
 
+  let ocrGenerationId: string | null = null
+  let ocrCostUsd: number | null = null
   try {
     const stored = await readStoredFile(existing.blobPathname)
     if (!stored) throw new Error('Stored invoice is unavailable.')
     const bytes = Buffer.from(stored.bytes)
     if (bytes.length === 0 || bytes.length > 10 * 1024 * 1024) throw new Error('Stored invoice has an invalid size.')
 
-    const extraction = await extractInvoiceDocument(bytes, existing.contentType as InvoiceMediaType, ocrSettings.model)
+    const extractionResult = await extractInvoiceDocument(bytes, existing.contentType as InvoiceMediaType, ocrSettings.model)
+    const extraction = extractionResult.extraction
+    ocrGenerationId = extractionResult.generationId
+    if (ocrGenerationId) ocrCostUsd = await getInvoiceGenerationCostUsd(ocrGenerationId)
     const [invoice] = await db.transaction(async (tx) => {
       const [updated] = await tx.update(invoiceRecord).set({
         supplier: extraction.supplier || 'Unknown supplier',
@@ -153,12 +158,14 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
         action: 'invoice_extraction_retried',
         entityType: 'invoice',
         entityId: id,
-        metadata: JSON.stringify({ extraction, ocrModel: ocrSettings.model, sourcePathname: existing.blobPathname, automatedEligibility: false }),
+        metadata: JSON.stringify({ extraction, ocrModel: ocrSettings.model, ocrGenerationId, ocrCostUsd, ocrCostStatus: !ocrGenerationId ? 'generation_id_unavailable' : ocrCostUsd === null ? 'cost_unavailable' : 'measured', sourcePathname: existing.blobPathname, automatedEligibility: false }),
       })
       return [updated]
     })
     return NextResponse.json({ invoice, extractionFailed: false, requiresReview: true })
   } catch (error) {
+    ocrGenerationId = getInvoiceGenerationIdFromError(error)
+    if (ocrGenerationId) ocrCostUsd = await getInvoiceGenerationCostUsd(ocrGenerationId)
     const issue = classifyInvoiceOcrIssue(error)
     console.error('[invoice-ocr] retry failed', { errorName: error instanceof Error ? error.name : 'UnknownError', issue, invoiceId: id })
     const note = issue === 'credits_required'
@@ -178,7 +185,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
       action: 'invoice_extraction_retry_failed',
       entityType: 'invoice',
       entityId: id,
-      metadata: JSON.stringify({ issue, sourcePathname: existing.blobPathname }),
+      metadata: JSON.stringify({ issue, ocrGenerationId, ocrCostUsd, ocrCostStatus: !ocrGenerationId ? 'generation_id_unavailable' : ocrCostUsd === null ? 'cost_unavailable' : 'measured', sourcePathname: existing.blobPathname }),
     })
     return NextResponse.json({ invoice, extractionFailed: true, ocrIssue: issue, requiresReview: true })
   }
