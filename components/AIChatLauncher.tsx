@@ -8,7 +8,7 @@ import { AIChatbot } from './ai-chatbot'
  * opening a chat panel docked above it (full-screen on phones).
  * The chat stays mounted while closed so the conversation isn't lost.
  */
-export function AIChatLauncher() {
+export function AIChatLauncher({ clientId, demoOnly = false }: { clientId?: string; demoOnly?: boolean }) {
   const [open, setOpen] = useState(false)
 
   // Esc closes the panel
@@ -32,7 +32,7 @@ export function AIChatLauncher() {
         aria-label="Imisoro AI assistant"
         className={panelClassName}
       >
-        <AIChatbot onClose={() => setOpen(false)} />
+        <AIChatbot onClose={() => setOpen(false)} clientId={clientId} demoOnly={demoOnly} />
       </div>
 
       <button
@@ -41,7 +41,7 @@ export function AIChatLauncher() {
         aria-expanded={open}
         aria-controls="ai-assistant-panel"
         aria-label={open ? 'Close AI assistant' : 'Open AI assistant'}
-        className="fixed bottom-6 right-6 z-50 items-center gap-2 rounded-full bg-[#0f5c49] py-3 pl-4 pr-5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#0a493a] focus:outline-none focus:ring-4 focus:ring-[#0f8062]/30"
+        className="fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 rounded-full bg-[#0f5c49] py-3 pl-4 pr-5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#0a493a] focus:outline-none focus:ring-4 focus:ring-[#0f8062]/30"
       >
         {open ? (
           <svg

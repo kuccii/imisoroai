@@ -1,18 +1,23 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
 import ReactMarkdown from 'react-markdown'
 
 const SUGGESTIONS = [
-  'How is net VAT calculated?',
-  'What makes an expense "supported"?',
-  'What do I need for an RRA e-Tax export?',
-  'Explain input vs output VAT',
+  'Summarize the selected workspace records',
+  'Which records are still marked not chased?',
+  'Show recent imported entries',
+  'What information is missing from these records?',
 ]
 
-export function AIChatbot({ onClose }: { onClose?: () => void } = {}) {
-  const { messages, sendMessage, regenerate, stop, setMessages, status, error } = useChat()
+export function AIChatbot({ onClose, clientId, demoOnly = false }: { onClose?: () => void; clientId?: string; demoOnly?: boolean } = {}) {
+  const transport = useMemo(
+    () => new DefaultChatTransport({ api: '/api/chat', body: { clientId, demoOnly } }),
+    [clientId, demoOnly],
+  )
+  const { messages, sendMessage, regenerate, stop, setMessages, status, error } = useChat({ transport })
   const [input, setInput] = useState('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -42,7 +47,7 @@ export function AIChatbot({ onClose }: { onClose?: () => void } = {}) {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Enter sends, Shift+Enter adds a newline; ignore Enter during IME composition
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault()
       submit(input)
     }
@@ -73,7 +78,7 @@ export function AIChatbot({ onClose }: { onClose?: () => void } = {}) {
           </span>
           <div className="leading-tight">
             <h2 className="text-sm font-semibold text-[#10251f]">Imisoro AI assistant</h2>
-            <p className="text-[11px] text-[#10251f]/55">AI-generated · informational only</p>
+            <p className="text-[11px] text-[#10251f]/55">Uses selected workspace records · no verified RRA rules</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -109,7 +114,7 @@ export function AIChatbot({ onClose }: { onClose?: () => void } = {}) {
         {messages.length === 0 && (
           <div className="mx-auto flex max-w-md flex-col items-center gap-4 pt-8 text-center">
             <p className="text-sm text-[#10251f]/60">
-              Ask about VAT, invoices, EBM evidence, e-Tax exports or filing deadlines.
+              Ask about records in this workspace. For current RRA rules, check official guidance.
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               {SUGGESTIONS.map(s => (

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { AIChatLauncher } from '@/components/AIChatLauncher'
 import useSWR from 'swr'
 import { ArrowDownToLine, ArrowUpRight, Check, Clipboard, FileUp, ListChecks, Menu, Plus, Settings, Users, Wallet, X } from 'lucide-react'
 import type { Language } from '@/lib/i18n'
@@ -253,6 +254,7 @@ export function MissingFirstWorkspace({ userName, initialLanguage = 'en' }: { us
         </div>}
       </main>
     </div>
+    <AIChatLauncher key={`${activeClientId ?? 'no-client'}:${demoMode}`} clientId={activeClientId} demoOnly={demoMode} />
   </div>
 }
 
