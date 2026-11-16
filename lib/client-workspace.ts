@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { ensureDatabaseSchema } from '@/lib/db/bootstrap'
-import { auditEvent, clientConsent, clientMembership, complianceTask, importedEvidence, profile, supplierMapping, workspaceClient } from '@/lib/db/schema'
+import { auditEvent, clientConsent, clientMembership, complianceTask, importedEvidence, invoiceRecord, profile, supplierMapping, workspaceClient } from '@/lib/db/schema'
 
 export type ActiveClientContext = {
   id: string
@@ -26,6 +26,7 @@ export async function ensurePersonalClient(user: { id: string; name?: string | n
   await db.insert(clientMembership).values({ id: `MEM-${user.id}-${clientId}`, clientId, userId: user.id, role: 'owner' }).onConflictDoNothing({ target: [clientMembership.clientId, clientMembership.userId] })
   // Backfill only this user's existing personal data into their newly created personal client.
   await db.update(importedEvidence).set({ clientId }).where(and(eq(importedEvidence.userId, user.id), isNull(importedEvidence.clientId)))
+  await db.update(invoiceRecord).set({ clientId }).where(and(eq(invoiceRecord.userId, user.id), isNull(invoiceRecord.clientId)))
   await db.update(supplierMapping).set({ clientId }).where(and(eq(supplierMapping.userId, user.id), eq(supplierMapping.clientId, '')))
   await db.update(auditEvent).set({ clientId }).where(and(eq(auditEvent.userId, user.id), isNull(auditEvent.clientId)))
   await db.update(complianceTask).set({ clientId }).where(and(eq(complianceTask.userId, user.id), isNull(complianceTask.clientId)))

@@ -23,6 +23,7 @@ type UpdatedInvoice = {
 
 type Props = {
   invoiceId: string
+  clientId?: string
   status: 'pending' | ReviewStatus
   supplier: string
   tin: string
@@ -43,7 +44,7 @@ type Props = {
 }
 
 export function InvoiceReviewActions({
-  invoiceId, status, supplier: initialSupplier, tin: initialTin, invoiceNumber: initialInvoiceNumber,
+  invoiceId, clientId, status, supplier: initialSupplier, tin: initialTin, invoiceNumber: initialInvoiceNumber,
   invoiceDate: initialDate, amount: initialAmount, vat: initialVat, currency, extractionStatus,
   extractionConfidence, ebmEvidence: initialEvidence, extractionNotes, documentPathname,
   originalFilename, expanded, onToggle, onUpdated,
@@ -76,7 +77,7 @@ export function InvoiceReviewActions({
     setRetrying(true)
     setError('')
     try {
-      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, { method: 'POST' })
+      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}${clientId ? `?clientId=${encodeURIComponent(clientId)}` : ''}`, { method: 'POST' })
       const data = await response.json()
       if (data.invoice) syncInvoice(data.invoice as UpdatedInvoice)
       if (!response.ok) setError(data.error || 'The invoice could not be scanned again.')
@@ -97,10 +98,10 @@ export function InvoiceReviewActions({
     setSaving(nextStatus)
     setError('')
     try {
-      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, {
+      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}${clientId ? `?clientId=${encodeURIComponent(clientId)}` : ''}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus, reviewNote: reviewNote.trim(), supplier, tin, invoiceNumber, ebmEvidence, invoiceDate: invoiceDate || 'UNKNOWN', amount: Number(amount), vat: Number(vat) }),
+        body: JSON.stringify({ clientId, status: nextStatus, reviewNote: reviewNote.trim(), supplier, tin, invoiceNumber, ebmEvidence, invoiceDate: invoiceDate || 'UNKNOWN', amount: Number(amount), vat: Number(vat) }),
       })
       const data = await response.json()
       if (!response.ok) {
@@ -132,7 +133,7 @@ export function InvoiceReviewActions({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {documentPathname && <a href={`/api/files?pathname=${encodeURIComponent(documentPathname)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-[#c8ddd2] bg-white px-3 py-2 text-xs font-semibold text-[#0f5c49"><ExternalLink className="size-3.5" />{originalFilename || 'Open original'}</a>}
+          {documentPathname && <a href={`/api/files?pathname=${encodeURIComponent(documentPathname)}${clientId ? `&clientId=${encodeURIComponent(clientId)}` : ''}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-[#c8ddd2] bg-white px-3 py-2 text-xs font-semibold text-[#0f5c49"><ExternalLink className="size-3.5" />{originalFilename || 'Open original'}</a>}
           <button type="button" onClick={onToggle} aria-expanded={expanded} aria-controls={`invoice-review-${invoiceId}`} className="rounded-lg bg-[#10251f] px-3 py-2 text-xs font-bold text-white">{expanded ? 'Close review' : 'Review details'}</button>
         </div>
       </div>

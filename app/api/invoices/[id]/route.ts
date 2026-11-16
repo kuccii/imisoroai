@@ -1,4 +1,5 @@
 import { auth } from '@/lib/auth'
+import { getClientContext } from '@/lib/client-workspace'
 import { getOcrSettings } from '@/lib/admin'
 import { db } from '@/lib/db'
 import { auditEvent, invoiceRecord } from '@/lib/db/schema'
@@ -26,6 +27,9 @@ const updateSchema = z.object({
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const client = await getClientContext(session.user, new URL(request.url).searchParams.get('clientId') || `CL-PERSONAL-${session.user.id}`)
+  if (!client) return NextResponse.json({ error: 'Client not found or access not granted.' }, { status: 404 })
+  if (!client.consentActive) return NextResponse.json({ error: 'Client consent is not active.' }, { status: 409 })
 
   let input: unknown
   try {
@@ -40,7 +44,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const result = await db.transaction(async (tx) => {
     const [existing] = await tx.select().from(invoiceRecord).where(and(
       eq(invoiceRecord.id, id),
-      eq(invoiceRecord.userId, session.user.id),
+      eq(invoiceRecord.clientId, client.id),
     )).limit(1)
     if (!existing) return { kind: 'missing' as const }
     if (existing.extractionStatus === 'processing') return { kind: 'processing' as const }
@@ -60,13 +64,14 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       updatedAt: new Date(),
     }).where(and(
       eq(invoiceRecord.id, id),
-      eq(invoiceRecord.userId, session.user.id),
+      eq(invoiceRecord.clientId, client.id),
     )).returning()
     if (!invoice) return { kind: 'missing' as const }
 
     await tx.insert(auditEvent).values({
       id: `AUD-${crypto.randomUUID()}`,
       userId: session.user.id,
+      clientId: client.id,
       action: `invoice_review_${body.data.status}`,
       entityType: 'invoice',
       entityId: invoice.id,
@@ -95,11 +100,14 @@ export const maxDuration = 60
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const client = await getClientContext(session.user, new URL(_request.url).searchParams.get('clientId') || `CL-PERSONAL-${session.user.id}`)
+  if (!client) return NextResponse.json({ error: 'Client not found or access not granted.' }, { status: 404 })
+  if (!client.consentActive) return NextResponse.json({ error: 'Client consent is not active.' }, { status: 409 })
 
   const { id } = await context.params
   const [existing] = await db.select().from(invoiceRecord).where(and(
     eq(invoiceRecord.id, id),
-    eq(invoiceRecord.userId, session.user.id),
+    eq(invoiceRecord.clientId, client.id),
   )).limit(1)
   if (!existing) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
   if (!existing.blobPathname || !existing.contentType || !['application/pdf', 'image/jpeg', 'image/png'].includes(existing.contentType)) {
@@ -116,7 +124,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
 
   const [claimed] = await db.update(invoiceRecord).set({ extractionStatus: 'processing', updatedAt: new Date() }).where(and(
     eq(invoiceRecord.id, id),
-    eq(invoiceRecord.userId, session.user.id),
+    eq(invoiceRecord.clientId, client.id),
     eq(invoiceRecord.status, 'pending'),
     ne(invoiceRecord.extractionStatus, 'extracted'),
     or(ne(invoiceRecord.extractionStatus, 'processing'), lt(invoiceRecord.updatedAt, staleProcessingCutoff)),
@@ -149,12 +157,13 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
         ebmEvidence: extraction.evidence,
         extractionNotes: JSON.stringify(extraction.notes),
         updatedAt: new Date(),
-      }).where(and(eq(invoiceRecord.id, id), eq(invoiceRecord.userId, session.user.id), eq(invoiceRecord.status, 'pending'), eq(invoiceRecord.extractionStatus, 'processing'))).returning()
+      }).where(and(eq(invoiceRecord.id, id), eq(invoiceRecord.clientId, client.id), eq(invoiceRecord.status, 'pending'), eq(invoiceRecord.extractionStatus, 'processing'))).returning()
       if (!updated) throw new Error('Invoice scan state changed before extraction completed.')
 
       await tx.insert(auditEvent).values({
         id: `AUD-${crypto.randomUUID()}`,
         userId: session.user.id,
+        clientId: client.id,
         action: 'invoice_extraction_retried',
         entityType: 'invoice',
         entityId: id,
@@ -178,10 +187,11 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
       extractionConfidence: null,
       extractionNotes: JSON.stringify([note]),
       updatedAt: new Date(),
-    }).where(and(eq(invoiceRecord.id, id), eq(invoiceRecord.userId, session.user.id), eq(invoiceRecord.status, 'pending'), eq(invoiceRecord.extractionStatus, 'processing'))).returning()
+    }).where(and(eq(invoiceRecord.id, id), eq(invoiceRecord.clientId, client.id), eq(invoiceRecord.status, 'pending'), eq(invoiceRecord.extractionStatus, 'processing'))).returning()
     await db.insert(auditEvent).values({
       id: `AUD-${crypto.randomUUID()}`,
       userId: session.user.id,
+      clientId: client.id,
       action: 'invoice_extraction_retry_failed',
       entityType: 'invoice',
       entityId: id,

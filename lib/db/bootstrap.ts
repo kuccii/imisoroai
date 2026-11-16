@@ -70,6 +70,8 @@ const statements = [
   `CREATE TABLE IF NOT EXISTS "invoice_record" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL,
+    "clientId" text,
+    "documentKind" text NOT NULL DEFAULT 'purchase_invoice',
     "supplier" text NOT NULL,
     "tin" text NOT NULL,
     "invoiceDate" text NOT NULL,
@@ -88,6 +90,9 @@ const statements = [
     "createdAt" timestamptz NOT NULL DEFAULT now(),
     "updatedAt" timestamptz NOT NULL DEFAULT now()
   )`,
+  `ALTER TABLE "invoice_record" ADD COLUMN IF NOT EXISTS "clientId" text`,
+  `ALTER TABLE "invoice_record" ADD COLUMN IF NOT EXISTS "documentKind" text NOT NULL DEFAULT 'purchase_invoice'`,
+  `CREATE INDEX IF NOT EXISTS "invoice_record_clientId_createdAt_idx" ON "invoice_record" ("clientId", "createdAt")`,
   `CREATE TABLE IF NOT EXISTS "compliance_task" (
     "id" text PRIMARY KEY,
     "userId" text NOT NULL,

@@ -1,4 +1,5 @@
 import { auth } from '@/lib/auth'
+import { getClientContext } from '@/lib/client-workspace'
 import { getOcrSettings } from '@/lib/admin'
 import { db } from '@/lib/db'
 import { auditEvent, invoiceRecord } from '@/lib/db/schema'
@@ -29,6 +30,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Attach a PDF, JPG, or PNG invoice.' }, { status: 400 })
   }
 
+  const requestedClientId = form.get('clientId')
+  const client = await getClientContext(session.user, typeof requestedClientId === 'string' && requestedClientId ? requestedClientId : `CL-PERSONAL-${session.user.id}`)
+  if (!client) return NextResponse.json({ error: 'Client not found or access not granted.' }, { status: 404 })
+  if (!client.consentActive) return NextResponse.json({ error: 'Record client consent before uploading or scanning documents.' }, { status: 409 })
+  const submittedKind = form.get('documentKind')
+  const requestedKind = submittedKind === null ? 'purchase_invoice' : submittedKind
+  if (requestedKind !== 'purchase_invoice' && requestedKind !== 'expense_receipt') return NextResponse.json({ error: 'Choose a purchase invoice or expense receipt.' }, { status: 400 })
+
   const file = form.get('file')
   if (!(file instanceof File)) return NextResponse.json({ error: 'Attach a PDF, JPG, or PNG invoice.' }, { status: 400 })
   if (file.size === 0 || file.size > 10 * 1024 * 1024) return NextResponse.json({ error: 'Files must be between 1 byte and 10MB.' }, { status: 400 })
@@ -45,7 +54,7 @@ export async function POST(request: Request) {
   let stage: 'storage' | 'database' | 'extraction' = 'storage'
 
   try {
-    const blob = await storeFile(`invoices/${session.user.id}/${id}-${safeName}`, bytes, file.type)
+    const blob = await storeFile(`invoices/${client.id}/${id}-${safeName}`, bytes, file.type)
     blobPathname = blob.pathname
     blobUrl = blob.url
 
@@ -54,6 +63,8 @@ export async function POST(request: Request) {
       const [saved] = await tx.insert(invoiceRecord).values({
         id,
         userId: session.user.id,
+        clientId: client.id,
+        documentKind: requestedKind,
         supplier: 'Unknown supplier',
         tin: 'PENDING',
         invoiceDate: 'UNKNOWN',
@@ -74,10 +85,11 @@ export async function POST(request: Request) {
       await tx.insert(auditEvent).values({
         id: `AUD-${crypto.randomUUID()}`,
         userId: session.user.id,
+        clientId: client.id,
         action: 'invoice_uploaded_for_human_review',
         entityType: 'invoice',
         entityId: id,
-        metadata: JSON.stringify({ originalFilename: file.name, sourcePathname: blobPathname, extractionStatus: 'processing', automatedEligibility: false }),
+        metadata: JSON.stringify({ originalFilename: file.name, documentKind: requestedKind, sourcePathname: blobPathname, extractionStatus: 'processing', automatedEligibility: false }),
       })
       return [saved]
     })
@@ -143,15 +155,16 @@ export async function POST(request: Request) {
         ebmEvidence: invoiceData.evidence,
         extractionNotes: JSON.stringify(invoiceData.notes),
         updatedAt: new Date(),
-      }).where(and(eq(invoiceRecord.id, id), eq(invoiceRecord.userId, session.user.id))).returning()
+      }).where(and(eq(invoiceRecord.id, id), eq(invoiceRecord.userId, session.user.id), eq(invoiceRecord.clientId, client.id))).returning()
 
       await tx.insert(auditEvent).values({
         id: `AUD-${crypto.randomUUID()}`,
         userId: session.user.id,
+        clientId: client.id,
         action: extraction ? 'invoice_extraction_completed' : 'invoice_extraction_failed',
         entityType: 'invoice',
         entityId: id,
-        metadata: JSON.stringify({ extraction, extractionFailed, ocrIssue, ocrModel: ocrSettings.model, ocrEnabled: ocrSettings.enabled, ocrGenerationId, ocrCostUsd, ocrCostStatus: !ocrSettings.enabled ? 'not_applicable' : !ocrGenerationId ? 'generation_id_unavailable' : ocrCostUsd === null ? 'cost_unavailable' : 'measured', sourcePathname: blobPathname, automatedEligibility: false }),
+        metadata: JSON.stringify({ extraction, extractionFailed, ocrIssue, documentKind: requestedKind, ocrModel: ocrSettings.model, ocrEnabled: ocrSettings.enabled, ocrGenerationId, ocrCostUsd, ocrCostStatus: !ocrSettings.enabled ? 'not_applicable' : !ocrGenerationId ? 'generation_id_unavailable' : ocrCostUsd === null ? 'cost_unavailable' : 'measured', sourcePathname: blobPathname, automatedEligibility: false }),
       })
       return [updated]
     })
