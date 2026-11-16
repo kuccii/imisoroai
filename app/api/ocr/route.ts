@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { auditEvent, invoiceRecord } from '@/lib/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { classifyInvoiceOcrIssue, extractInvoiceDocument, getInvoiceGenerationCostUsd, getInvoiceGenerationIdFromError, type InvoiceExtraction, type InvoiceMediaType } from '@/lib/invoice-ocr'
+import { getInvoiceReviewIssues } from '@/lib/invoice-quality'
 import { deleteStoredFile, storeFile } from '@/lib/storage'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
@@ -141,6 +142,9 @@ export async function POST(request: Request) {
             : 'Automatic extraction could not read this file. Enter the values from the original document.'],
     }
 
+    const qualityIssues = getInvoiceReviewIssues({ ...invoiceData, ebmEvidence: invoiceData.evidence, confidence: extraction?.confidence ?? null })
+    const reviewNotes = [...invoiceData.notes, ...qualityIssues.map((issue) => `${issue}.`)].slice(0, 8)
+
     const [invoice] = await db.transaction(async (tx) => {
       const [updated] = await tx.update(invoiceRecord).set({
         supplier: invoiceData.supplier || 'Unknown supplier',
@@ -153,7 +157,7 @@ export async function POST(request: Request) {
         extractionStatus: extraction ? 'extracted' : ocrSettings.enabled ? ocrIssue || 'unavailable' : 'admin_disabled',
         extractionConfidence: extraction ? String(invoiceData.confidence) : null,
         ebmEvidence: invoiceData.evidence,
-        extractionNotes: JSON.stringify(invoiceData.notes),
+        extractionNotes: JSON.stringify(reviewNotes),
         updatedAt: new Date(),
       }).where(and(eq(invoiceRecord.id, id), eq(invoiceRecord.userId, session.user.id), eq(invoiceRecord.clientId, client.id))).returning()
 

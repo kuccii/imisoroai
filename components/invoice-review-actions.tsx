@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { AlertTriangle, Check, ExternalLink, FileText, RefreshCw, X } from 'lucide-react'
+import { getInvoiceReviewIssues } from '@/lib/invoice-quality'
 
 type ReviewStatus = 'supported' | 'unsupported'
 
@@ -119,6 +120,7 @@ export function InvoiceReviewActions({
 
   const extractionBlocked = extractionStatus === 'credits_required' || extractionStatus === 'billing_required'
   const extractionUnavailable = extractionStatus === 'unavailable' || extractionStatus === 'legacy'
+  const reviewIssues = getInvoiceReviewIssues({ supplier, tin, invoiceDate: invoiceDate || 'UNKNOWN', invoiceNumber, amount: Number(amount), vat: Number(vat), currency, ebmEvidence, confidence: extractionConfidence })
 
   return (
     <div className="mx-5 mb-4 rounded-2xl border border-[#e5eee8] bg-[#f8fbf9] p-4 md:mx-6">
@@ -143,6 +145,7 @@ export function InvoiceReviewActions({
         {extractionUnavailable && <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#ead9b8] bg-[#fff9ec] p-4 text-xs leading-5 text-[#735725]"><p><strong>Extraction needs attention.</strong> {extractionNotes[0] || 'The source is saved; check the values manually or retry the scan.'}</p><button type="button" onClick={() => void retryExtraction()} disabled={retrying || !documentPathname} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-2 font-bold text-[#735725] disabled:opacity-50"><RefreshCw className={`size-3.5 ${retrying ? 'animate-spin' : ''}`} />{retrying ? 'Scanning…' : 'Try scan again'}</button></div>}
         {extractionStatus === 'processing' && <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#eef5f0] p-3 text-xs text-[#31564a]"><p>A scan is in progress. If it has been stuck for more than two minutes, retry from the saved original.</p><button type="button" onClick={() => void retryExtraction()} disabled={retrying} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 font-bold disabled:opacity-50"><RefreshCw className={`size-3.5 ${retrying ? 'animate-spin' : ''}`} />{retrying ? 'Scanning…' : 'Retry scan'}</button></div>}
         {extractionNotes.length > 0 && extractionStatus === 'extracted' && <ul className="mb-4 list-disc space-y-1 rounded-xl bg-[#eef5f0] p-4 pl-8 text-xs leading-5 text-[#31564a]">{extractionNotes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}</ul>}
+        {reviewIssues.length > 0 && <div role="status" className="mb-4 rounded-xl border border-[#ead9b8] bg-[#fff9ec] p-4"><p className="text-xs font-bold text-[#735725]">Resolve or consciously verify these checks before including this record</p><ul className="mt-2 grid gap-1 text-xs leading-5 text-[#735725] sm:grid-cols-2">{reviewIssues.map(issue => <li key={issue}>• {issue}</li>)}</ul></div>}
         <form className="space-y-3" onSubmit={(event) => event.preventDefault()}>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1.5 text-xs font-semibold">Supplier<input required minLength={2} maxLength={160} value={supplier} onChange={(event) => setSupplier(event.target.value)} className="h-10 rounded-lg border border-[#c8ddd2] bg-white px-3 text-xs font-normal outline-none focus:border-[#0f8062]" /></label>
