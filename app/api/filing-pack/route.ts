@@ -5,6 +5,7 @@ import { and, eq, gte, lt } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { getInvoiceReviewIssues } from '@/lib/invoice-quality'
 
 const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
 
@@ -55,7 +56,10 @@ export async function GET(request: Request) {
   const eligiblePurchases = invoices.filter((invoice) => invoice.status === 'supported')
   const outstandingReview = invoices.filter((invoice) => invoice.status === 'pending')
   const unsupported = invoices.filter((invoice) => invoice.status === 'unsupported')
-  const scanIssues = invoices.filter((invoice) => invoice.status !== 'unsupported' && ['credits_required', 'billing_required', 'unavailable', 'legacy'].includes(invoice.extractionStatus))
+  const scanIssues = invoices.filter((invoice) => invoice.status !== 'unsupported' && (
+    ['credits_required', 'billing_required', 'unavailable', 'legacy'].includes(invoice.extractionStatus) ||
+    getInvoiceReviewIssues({ supplier: invoice.supplier, tin: invoice.tin, invoiceDate: invoice.invoiceDate, invoiceNumber: invoice.invoiceNumber, amount: invoice.amount, vat: invoice.vat, currency: invoice.currency, ebmEvidence: invoice.ebmEvidence, confidence: invoice.extractionConfidence === null ? null : Number(invoice.extractionConfidence) }).length > 0
+  ))
   const submissionBySale = new Map(submissions.map((submission) => [submission.saleId, submission]))
   const fiscalizedSales = storedFiscalizedSales.filter((sale) => {
     const submission = submissionBySale.get(sale.id)
@@ -116,7 +120,7 @@ export async function GET(request: Request) {
     },
     checklist: [
       { id: 'period', label: 'Choose the filing period and prepare a pack', status: 'ready' },
-      { id: 'invoice-scan', label: 'Resolve scan issues and verify invoice numbers, TINs, dates, and EBM evidence', status: scanIssueCount ? 'blocked' : 'ready' },
+      { id: 'invoice-scan', label: `Resolve scan or data-quality issues and verify invoice numbers, TINs, dates, currency, totals, and EBM evidence (${scanIssueCount} records)`, status: scanIssueCount ? 'blocked' : 'ready' },
       { id: 'review', label: 'Review purchase invoices and VAT evidence', status: outstandingReview.length ? 'blocked' : 'ready' },
       { id: 'sales', label: 'Reconcile sales with EBM/EIS records', status: recordedSales.length ? 'blocked' : verifiedFiscalizedSales.length ? 'ready' : 'required' },
       { id: 'submit', label: 'Complete and submit the return in RRA eTax', status: 'external' },
