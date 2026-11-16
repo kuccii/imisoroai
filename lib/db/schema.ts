@@ -68,6 +68,8 @@ export const profile = pgTable('profile', {
 export const invoiceRecord = pgTable('invoice_record', {
   id: text('id').primaryKey(),
   userId: text('userId').notNull(),
+  clientId: text('clientId'),
+  documentKind: text('documentKind').notNull().default('purchase_invoice'),
   supplier: text('supplier').notNull(),
   tin: text('tin').notNull(),
   invoiceDate: text('invoiceDate').notNull(),
